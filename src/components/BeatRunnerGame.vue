@@ -45,17 +45,33 @@
       <div v-if="!started && !gameOver" class="overlay">
         <div class="overlay-card">
           <h2>Hoppy Block</h2>
-          <p>Press <kbd>UP</kbd> to JUMP and <kbd>DOWN</kbd> to SLAM.</p>
-          <p class="help">Stay on beat, clear the blocks, squish the Gombas.</p>
+
+          <p><kbd>Space</kbd> — Jump</p>
+          <p><kbd>Shift</kbd> — Slam</p>
+          <p><kbd>↑</kbd> — Hang Time</p>
+          <p><kbd>↓</kbd> — Slow Motion</p>
+
+          <p class="help" style="margin-top: 0.6rem;">
+            Stay on beat to charge powers.
+            Slam enemies for bonus energy.
+            Floaters grow stronger with the music.
+          </p>
         </div>
       </div>
+
+
     </div>
 
     <p class="controls">
-    Controls: <kbd>Space</kbd> or <kbd>ArrowUp</kbd> and <kbd>Shift</kbd> or  <kbd>ArrowDown</kbd>
+    Controls:
+    <kbd>Space</kbd> Jump ·
+    <kbd>Shift</kbd> Slam ·
+    <kbd>↑</kbd> Hang ·
+    <kbd>↓</kbd> Slow
     </p>
   </div>
 </template>
+
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
@@ -68,12 +84,13 @@ const gameOver = ref(false)
 const started = ref(false)
 const beatPulse = ref(false)
 const bpm = ref(120)
+const charge = ref(0) // 0–100 power meter
 
 let ctx = null
 let width = 900
 let height = 400
 
-// Game objects
+// Game objects & state
 let player
 let obstacles
 let gravity
@@ -95,7 +112,9 @@ let timeData = null
 let bassEnergy = 0
 let midEnergy = 0
 let highEnergy = 0
-let lastSpawnTime = 0
+let lastBassSpawn = 0
+let lastMidSpawn = 0
+let lastHighSpawn = 0
 let obstacleSpawnIntervalId
 let rotation = 0
 let isSlamming = false
@@ -107,15 +126,39 @@ let scorePops = []
 let sonicBursts = []
 let deathByEnemy = false
 let playerFragments = []
-let lastBassSpawn = 0
-let lastMidSpawn = 0
-let lastHighSpawn = 0
+
+// global song energy (0–1)
+let songIntensity = 0
+
+// power state
+let hangActive = false
+let slowActive = false
+
+let hangHeld = false
+let slowHeld = false
+
+// small helpers
+function clamp(v, min, max) {
+  return v < min ? min : v > max ? max : v
+}
+function lerp(a, b, t) {
+  return a + (b - a) * t
+}
+
+function addCharge(amount) {
+  charge.value = clamp(charge.value + amount, 0, 100)
+}
+function consumeCharge(amount) {
+  charge.value = clamp(charge.value - amount, 0, 100)
+}
 
 function resetGame() {
   score.value = 0
   speed.value = 1
   gameOver.value = false
   started.value = false
+  charge.value = 50
+  deathByEnemy = false
 
   groundY = height - 60
   gravity = 2600
@@ -123,6 +166,7 @@ function resetGame() {
   baseScrollSpeed = 380
   scrollSpeed = baseScrollSpeed
   lastTimestamp = null
+  songIntensity = 0
 
   player = {
     x: 150,
@@ -142,9 +186,7 @@ function resetGame() {
   shockwaves = []
   scorePops = []
   sonicBursts = []
-  deathByEnemy = false
   playerFragments = []
-
 }
 
 async function handleAudioUpload(e) {
@@ -165,19 +207,77 @@ async function handleAudioUpload(e) {
   timeData = new Uint8Array(analyser.fftSize)
 
   src.connect(analyser)
+
+
+  const midFilter = audioCtx.createBiquadFilter()
+  midFilter.type = 'bandpass'
+  midFilter.frequency.value = 1200
+  midFilter.Q.value = 1.1
+
+  const drive = audioCtx.createWaveShaper()
+  drive.curve = makeDistortion(0)
+  drive.oversample = '4x'
+
+  // DRY / WET MIX
+  const dryGain = audioCtx.createGain()
+  const wetGain = audioCtx.createGain()
+  dryGain.gain.value = 1.0
+  wetGain.gain.value = 0.0
+
+  // FINAL OUTPUT COMPRESSOR
+  const compressor = audioCtx.createDynamicsCompressor()
+  compressor.threshold.value = -20
+  compressor.knee.value = 16
+  compressor.ratio.value = 2.8
+  compressor.attack.value = 0.005
+  compressor.release.value = 0.18
+
+  // 🔥 CLEAN ROUTING (IMPORTANT)
+  src.disconnect()
+
+  // DRY = FULL SPECTRUM
+  src.connect(dryGain)
+
+  // WET = MID ONLY → DISTORTED
+  src.connect(midFilter)
+  midFilter.connect(drive)
+  drive.connect(wetGain)
+
+  // MIX + CONTROL
+  dryGain.connect(compressor)
+  wetGain.connect(compressor)
+
+  compressor.connect(analyser)
   analyser.connect(audioCtx.destination)
 
+  // store refs
+  audio._dryGain = dryGain
+  audio._wetGain = wetGain
+  audio._drive = drive
+  audio._compressor = compressor
+
+  analyser.connect(audioCtx.destination)
+
+  // Decode buffer for more robust BPM detection
   const arrayBuffer = await file.arrayBuffer()
   const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer)
 
   detectedBpm = detectBPMFromBuffer(decodedBuffer)
   bpm.value = detectedBpm
-
   console.log('✅ Decoded BPM:', detectedBpm)
 
   audioStarted = false
 }
 
+function makeDistortion(k = 80) {
+  const n = 44100
+  const curve = new Float32Array(n)
+  for (let i = 0; i < n; i++) {
+    const x = (i * 2) / n - 1
+    curve[i] = (1 + k) * x / (1 + k * Math.abs(x))
+  }
+  return curve
+}
 
 function detectBPMFromBuffer(buffer) {
   const channelData = buffer.getChannelData(0)
@@ -200,8 +300,8 @@ function detectBPMFromBuffer(buffer) {
   }
 
   const tempos = intervals.map(i => 60 / i)
-
   const grouped = {}
+
   for (const t of tempos) {
     const rounded = Math.round(t)
     grouped[rounded] = (grouped[rounded] || 0) + 1
@@ -211,57 +311,13 @@ function detectBPMFromBuffer(buffer) {
   return strongest ? Number(strongest[0]) : 120
 }
 
-async function analyzeBPM() {
-  if (!audio || !analyser) return
-
-  const buffer = new Uint8Array(analyser.frequencyBinCount)
-  const peaks = []
-  let lastPeak = 0
-
-  audio.play()
-
-  const sampleInterval = setInterval(() => {
-    analyser.getByteFrequencyData(buffer)
-
-    let energy = 0
-    for (let i = 0; i < buffer.length; i++) {
-      energy += buffer[i]
-    }
-
-    const now = performance.now()
-
-    if (energy > 40000 && now - lastPeak > 300) {
-      peaks.push(now)
-      lastPeak = now
-    }
-
-    if (peaks.length > 20) {
-      clearInterval(sampleInterval)
-
-      const intervals = []
-      for (let i = 1; i < peaks.length; i++) {
-        intervals.push(peaks[i] - peaks[i - 1])
-      }
-
-      const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length
-      detectedBpm = Math.round(60000 / avg)
-
-      bpm.value ? (bpm.value = detectedBpm) : (bpm = detectedBpm)
-      console.log('Detected BPM:', detectedBpm)
-
-      audio.pause()
-      audio.currentTime = 0
-    }
-  }, 50)
-}
-
 function spawnEnemy(type) {
   let enemy
 
   if (type === 'goomba') {
     enemy = {
       type: 'goomba',
-      band: 'bass',            // 👈 tied to kick
+      band: 'bass',            // tied to kick
       x: width + 40,
       y: groundY - 28,
       width: 32,
@@ -271,8 +327,7 @@ function spawnEnemy(type) {
       squishTimer: 0,
       pancakeHeight: 6,
       currentHeight: 28,
-
-      bob: 0,                  // 👈 dance offset
+      bob: 0,
       squash: 1,
     }
   }
@@ -280,7 +335,7 @@ function spawnEnemy(type) {
   if (type === 'spiker') {
     enemy = {
       type: 'spiker',
-      band: 'mid',             // 👈 tied to synth
+      band: 'mid',             // tied to synth
       x: width + 40,
       y: groundY - 34,
       width: 26,
@@ -290,7 +345,6 @@ function spawnEnemy(type) {
       squishTimer: 0,
       pancakeHeight: 10,
       currentHeight: 34,
-
       bob: 0,
       squash: 1,
     }
@@ -299,28 +353,24 @@ function spawnEnemy(type) {
   if (type === 'floater') {
     enemy = {
       type: 'floater',
-      band: 'high',            // 👈 tied to hats / sparkle
+      band: 'high',            // tied to hats / sparkle
       x: width + 40,
-      y: groundY - 120,        // 👈 airborne enemy
+      y: groundY - 120,
       width: 28,
       height: 28,
       alive: true,
       squished: false,
-
       bob: 0,
       phase: Math.random() * Math.PI * 2,
+      rage: 0,                 // 0–1 emotional state
     }
   }
 
   if (enemy) enemies.push(enemy)
 }
 
-
 function spawnObstacle() {
-  // Short-ish game: keep spacing reasonable
   const minGap = 280
-  const maxGap = 480
-
   const widthOptions = [30, 40, 50]
   const chosenWidth = widthOptions[Math.floor(Math.random() * widthOptions.length)]
 
@@ -332,14 +382,74 @@ function spawnObstacle() {
     passed: false,
   }
 
-  // Only add if no obstacle is immediately overlapping at spawn
   const tooClose = obstacles.some(o => obstacle.x - (o.x + o.width) < minGap)
   if (!tooClose) {
     obstacles.push(obstacle)
   }
 }
 
+function drawHUD() {
+  const pad = 14
 
+  // === Charge Bar ===
+  const barWidth = 180
+  const barHeight = 10
+  const fill = (charge.value / 100) * barWidth
+
+  ctx.save()
+  ctx.globalAlpha = 0.85
+  ctx.fillStyle = '#020617'
+  ctx.fillRect(pad, pad, barWidth, barHeight)
+
+  ctx.fillStyle = '#22c55e'
+  ctx.fillRect(pad, pad, fill, barHeight)
+
+  ctx.strokeStyle = '#38bdf8'
+  ctx.lineWidth = 1.5
+  ctx.strokeRect(pad, pad, barWidth, barHeight)
+
+  ctx.font = '12px system-ui'
+  ctx.fillStyle = '#e5e7eb'
+  ctx.fillText(`CHARGE`, pad, pad - 4)
+  ctx.restore()
+
+  // === Power Status Icons ===
+  ctx.save()
+  ctx.font = '14px system-ui'
+  ctx.textAlign = 'left'
+  ctx.fillStyle = hangActive ? '#facc15' : '#64748b'
+  ctx.fillText('⬆ HANG', pad, pad + 28)
+
+  ctx.fillStyle = slowActive ? '#38bdf8' : '#64748b'
+  ctx.fillText('⬇ SLOW', pad + 80, pad + 28)
+  ctx.restore()
+
+  // === BPM + Intensity ===
+  ctx.save()
+  ctx.font = '13px system-ui'
+  ctx.textAlign = 'right'
+
+  const bpmX = width - pad
+  ctx.fillStyle = '#fde68a'
+  ctx.fillText(`BPM ${bpm.value}`, bpmX, pad + 10)
+
+  const intensityBarWidth = 120
+  const iFill = songIntensity * intensityBarWidth
+
+  ctx.fillStyle = '#020617'
+  ctx.fillRect(width - intensityBarWidth - pad, pad + 18, intensityBarWidth, 8)
+
+  ctx.fillStyle = '#a855f7'
+  ctx.fillRect(width - intensityBarWidth - pad, pad + 18, iFill, 8)
+
+  ctx.strokeStyle = '#f472b6'
+  ctx.strokeRect(width - intensityBarWidth - pad, pad + 18, intensityBarWidth, 8)
+
+  ctx.fillStyle = '#e5e7eb'
+  ctx.fillText('INTENSITY', bpmX, pad + 40)
+
+  ctx.restore()
+}
 async function startAudio() {
   if (!audio || audioStarted) return
 
@@ -347,24 +457,33 @@ async function startAudio() {
     await audioCtx.resume()
   }
 
+  audio.playbackRate = 1.0
   await audio.play()
   audioStarted = true
   lastBeatTime = performance.now()
 }
 
-
-
 function startObstacleSpawner() {
-  // Fallback in case beat-based spawning is sparse
   if (obstacleSpawnIntervalId) clearInterval(obstacleSpawnIntervalId)
   obstacleSpawnIntervalId = setInterval(() => {
     if (!started.value || gameOver.value) return
-    // Only spawn if right side is relatively clear
     const hasNearRight = obstacles.some(o => width - o.x < 260)
     if (!hasNearRight) spawnObstacle()
   }, 1600)
 }
 
+// Simple "near beat" detector for jump charge
+function maybeGrantBeatJumpCharge() {
+  if (!audioStarted) return
+  const beatMs = 60000 / bpm.value
+  const now = performance.now()
+  const distToCurrent = Math.abs(now - lastBeatTime)
+  const distToNext = Math.abs((lastBeatTime + beatMs) - now)
+  const dist = Math.min(distToCurrent, distToNext)
+  if (dist < 80) {
+    addCharge(4)
+  }
+}
 
 function handleJump() {
   startAudio()
@@ -376,6 +495,8 @@ function handleJump() {
     resetGame()
     return
   }
+
+  maybeGrantBeatJumpCharge()
 
   if (player.onGround) {
     player.vy = jumpVelocity
@@ -395,10 +516,56 @@ function handleSlam() {
   }
 }
 
-function update(dt) {
+function update(dtRaw) {
+  // Determine power intents before time scaling
+  const dt = dtRaw
+
+  hangActive = hangHeld && charge.value > 0
+  slowActive = slowHeld && charge.value > 0
+
+  // prevent both at the same time
+  if (hangActive && slowActive) {
+    slowActive = false
+  }
+
+
+
+  // Update audio playback rate for slow-mo
+  if (audio) {
+    audio.playbackRate = slowActive ? 0.5 : 1.0
+  }
+
+
+  if (audio && audio._drive && audio._dryGain && audio._wetGain) {
+    if (hangActive) {
+      const amt = 6 + (charge.value / 100) * 10   // softer distortion
+      audio._drive.curve = makeDistortion(amt)
+
+      audio._wetGain.gain.value = 0.35   // much lower wet level
+      audio._dryGain.gain.value = 0.9    // small clean dip for contrast
+    } else {
+      audio._drive.curve = makeDistortion(0)
+
+      audio._wetGain.gain.value = 0.0
+      audio._dryGain.gain.value = 1.0
+    }
+  }
+
+
+
+  if (audio && hangActive) {
+    const beat = 60000 / bpm.value
+    const phase = (performance.now() % beat) / beat
+    const tremolo = 0.85 + Math.sin(phase * Math.PI * 2) * 0.15
+    audio.volume = tremolo
+  } else if (audio) {
+    audio.volume = 1
+  }
+
   const beatPhase = (performance.now() - lastBeatTime) / (60000 / bpm.value)
   const beatPulseStrength = Math.sin(Math.min(beatPhase, 1) * Math.PI)
-  // REAL AUDIO BEAT SYNC
+
+  // REAL AUDIO BEAT SYNC & ENERGY
   if (analyser && audioStarted) {
     analyser.getByteFrequencyData(freqData)
 
@@ -407,14 +574,33 @@ function update(dt) {
     let highs = 0
 
     for (let i = 0; i < 30; i++) bass += freqData[i]        // kick / bass
-    for (let i = 40; i < 120; i++) mids += freqData[i]     // synth / leads
-    for (let i = 140; i < 220; i++) highs += freqData[i]   // hats / sparkle
+    for (let i = 40; i < 120; i++) mids += freqData[i]      // synth / leads
+    for (let i = 140; i < 220; i++) highs += freqData[i]    // hats / sparkle
 
     bassEnergy = bass / 30 / 255
     midEnergy = mids / 80 / 255
     highEnergy = highs / 80 / 255
+
+    const rawEnergy = bassEnergy * 0.5 + midEnergy * 0.3 + highEnergy * 0.2
+    songIntensity = lerp(songIntensity, rawEnergy, 0.04)
   }
 
+  // === CHARGE SYSTEM ===
+
+  if (hangActive || slowActive) {
+    charge.value -= 30 * dtRaw
+  } else if (player.onGround) {
+    charge.value += 35 * dtRaw
+  }
+
+  charge.value = clamp(charge.value, 0, 100)
+
+  if (charge.value <= 0) {
+    hangActive = false
+    slowActive = false
+  }
+
+  // Enemy dance & rage
   for (const e of enemies) {
     if (e.band === 'bass') {
       e.squash = 1 + beatPulseStrength * bassEnergy * 0.6
@@ -431,8 +617,21 @@ function update(dt) {
       e.bob = Math.sin(e.phase) * 10 * highEnergy
     }
 
+    if (e.type === 'floater') {
+      e.rage = clamp(
+        e.rage + songIntensity * 0.6 * dt - 0.15 * dt,
+        0,
+        1
+      )
+      // Optional: make enraged floaters drift toward player a bit
+      if (e.rage > 0.6) {
+        const dir = player.x - e.x
+        e.x += Math.sign(dir) * 40 * dt * (0.5 + e.rage)
+      }
+    }
   }
 
+  // Beat-timed spawns
   if (audioStarted) {
     const beatMs = 60000 / bpm.value
     const now = performance.now()
@@ -446,10 +645,7 @@ function update(dt) {
       }, 90)
 
       if (started.value && !gameOver.value) {
-        const t = performance.now()
-
-        // KICK → GOOMBA
-
+        // Use *current* energies at beat time
         if (bassEnergy > 0.55 && now - lastBassSpawn > 260) {
           spawnEnemy('goomba')
           lastBassSpawn = now
@@ -468,29 +664,33 @@ function update(dt) {
         if (highEnergy > 0.65) {
           spawnObstacle()
         }
-
       }
-
     }
   }
 
-  // Score + speed ramp
-  score.value += dt * 0.001 * 100 // roughly 100 points per second
+
+  // Score + speed ramp (bonus during slow-mo)
+  const scoreMult = slowActive ? 1.8 : 1
+  score.value += dt * 0.001 * 100 * scoreMult
   const speedFactor = 1 + score.value / 5000
   speed.value = speedFactor
   scrollSpeed = baseScrollSpeed * speedFactor
 
-  // Gravity & slam boost
-  player.vy += (isSlamming ? gravity * 2.5 : gravity) * dt
-  player.y += player.vy * dt
+  const timeScale = slowActive ? 0.45 : 1
 
-  // Track apex for flip timing
+  const effectiveGravity = hangActive ? gravity * 0.035 : gravity
+
+
+  player.vy += (isSlamming ? effectiveGravity * 2.5 : effectiveGravity) * dtRaw * timeScale
+  player.y += player.vy * dtRaw * timeScale
+
+  scrollSpeed = baseScrollSpeed * speed.value * timeScale
+
   if (player.y < jumpApexY) {
     jumpApexY = player.y
   }
 
   // Move enemies
-
   for (const e of enemies) {
     e.x -= scrollSpeed * 0.95 * dt
   }
@@ -503,16 +703,14 @@ function update(dt) {
   for (const e of enemies) {
     if (e.squished) {
       e.squishTimer -= dt
-
-      // Animate pancake compression
       e.currentHeight = Math.max(
-        e.pancakeHeight,
-        e.currentHeight - 220 * dt
+        e.pancakeHeight ?? 0,
+        (e.currentHeight ?? 0) - 220 * dt
       )
     }
   }
 
-  // Slam + body collision with enemies
+  // Enemy collisions
   for (const e of enemies) {
     if (
       player.x < e.x + e.width &&
@@ -520,15 +718,14 @@ function update(dt) {
       player.y < e.y + e.height &&
       player.y + player.height > e.y
     ) {
-
-      // ✅ GOOMBA = slam kill
       if (e.type === 'goomba' && isSlamming && e.alive && !e.squished) {
+        // slam kill
         e.squished = true
         e.alive = false
         e.squishTimer = 0.18
         e.currentHeight = e.height
-
         score.value += 250
+        addCharge(12)
 
         sonicBursts.push({
           x: e.x + e.width / 2,
@@ -544,43 +741,45 @@ function update(dt) {
           alpha: 1,
           vy: -80,
         })
-      }
+      } else if (e.type === 'floater' && isSlamming && e.alive) {
+        // calm vs enraged floater
+        const enraged = (e.rage ?? 0) > 0.85
+        if (!enraged || slowActive || hangActive) {
+          e.alive = false
+          score.value += enraged ? 500 : 400
+          addCharge(enraged ? 30 : 20)
 
-      // ✅ FLOATER = shockwave kill only
-      else if (e.type === 'floater' && isSlamming && e.alive) {
-        e.alive = false
-        score.value += 400
-
-        sonicBursts.push({
-          x: e.x + e.width / 2,
-          y: e.y + e.height / 2,
-          r: 0,
-          alpha: 0.9,
-        })
-      }
-
-      // ✅ SPIKER or mistime = death
-      else if (e.alive && !e.squished) {
+          sonicBursts.push({
+            x: e.x + e.width / 2,
+            y: e.y + e.height / 2,
+            r: 0,
+            alpha: 0.9,
+          })
+        } else {
+          gameOver.value = true
+          deathByEnemy = true
+        }
+      } else if (e.alive && !e.squished) {
+        // spiker or bad contact → death
         gameOver.value = true
         deathByEnemy = true
       }
     }
-
-    // ✅ PLAYER SHATTER — MUST BE INSIDE LOOP
-    if (deathByEnemy && playerFragments.length === 0) {
-      const cx = player.x + player.width / 2
-      const cy = player.y + player.height / 2
-      const size = player.width / 2
-
-      playerFragments.push(
-        { x: cx, y: cy, vx: -220, vy: -260, size, alpha: 1 },
-        { x: cx, y: cy, vx: 220,  vy: -260, size, alpha: 1 },
-        { x: cx, y: cy, vx: -220, vy: 260,  size, alpha: 1 },
-        { x: cx, y: cy, vx: 220,  vy: 260,  size, alpha: 1 },
-      )
-    }
   }
 
+  // Player shatter on death (one-time)
+  if (deathByEnemy && playerFragments.length === 0) {
+    const cx = player.x + player.width / 2
+    const cy = player.y + player.height / 2
+    const size = player.width / 2
+
+    playerFragments.push(
+      { x: cx, y: cy, vx: -220, vy: -260, size, alpha: 1 },
+      { x: cx, y: cy, vx: 220,  vy: -260, size, alpha: 1 },
+      { x: cx, y: cy, vx: -220, vy: 260,  size, alpha: 1 },
+      { x: cx, y: cy, vx: 220,  vy: 260,  size, alpha: 1 },
+    )
+  }
 
   // Expand shockwaves
   for (const s of shockwaves) {
@@ -603,11 +802,11 @@ function update(dt) {
   }
   scorePops = scorePops.filter(p => p.alpha > 0)
 
-  // Animate player shatter fragments
+  // Animate player fragments
   for (const f of playerFragments) {
     f.x += f.vx * dt
     f.y += f.vy * dt
-    f.vy += 1800 * dt   // gravity pull
+    f.vy += 1800 * dt
     f.alpha -= 1.2 * dt
   }
   playerFragments = playerFragments.filter(f => f.alpha > 0)
@@ -615,35 +814,37 @@ function update(dt) {
   // Flip rotation: 1.5 rotations over full jump arc
   if (!player.onGround) {
     const jumpHeight = jumpStartY - jumpApexY || 1
-    const progress = Math.min(
-      1,
-      (jumpStartY - player.y) / (jumpHeight * 2)
-    )
-    rotation = progress * Math.PI * 3 // 1.5 flips (540°)
+    const progress = Math.min(1, (jumpStartY - player.y) / (jumpHeight * 2))
+    rotation = progress * Math.PI * 3
+
+    // ✅ HANG MODE
+
+    if (hangActive) {
+      // strong float clamp + gentle upward bias
+      player.vy = Math.max(player.vy - 180 * dtRaw, -90)
+    }
+
   }
 
+
+  // Ground & slam shockwave
   if (player.y + player.height >= groundY) {
     player.y = groundY - player.height
     player.vy = 0
     player.onGround = true
 
     if (isSlamming) {
-      // SHOCKWAVE
       shockwaves.push({
         x: player.x + player.width / 2,
         y: groundY,
         r: 0,
         alpha: 0.6,
       })
-
-
     }
 
     isSlamming = false
     rotation = 0
   }
-
-
 
   // Move obstacles
   for (const o of obstacles) {
@@ -653,7 +854,7 @@ function update(dt) {
   // Remove off-screen obstacles
   obstacles = obstacles.filter(o => o.x + o.width > 0)
 
-  // Collision detection
+  // Directional block collision
   for (const o of obstacles) {
     if (
       player.x < o.x + o.width &&
@@ -661,8 +862,39 @@ function update(dt) {
       player.y < o.y + o.height &&
       player.y + player.height > o.y
     ) {
-      gameOver.value = true
-      break
+      const overlapTop = player.y + player.height - o.y
+      const overlapBottom = o.y + o.height - player.y
+      const overlapLeft = player.x + player.width - o.x
+      const overlapRight = o.x + o.width - player.x
+
+      const minOverlapY = Math.min(overlapTop, overlapBottom)
+      const minOverlapX = Math.min(overlapLeft, overlapRight)
+
+      if (minOverlapY < minOverlapX && player.vy >= 0 && player.y < o.y) {
+        // Top-contact: bounce or super-bounce if slamming
+        if (isSlamming) {
+          player.vy = jumpVelocity * 1.3
+          addCharge(16)
+          shockwaves.push({
+            x: player.x + player.width / 2,
+            y: o.y,
+            r: 0,
+            alpha: 0.7,
+          })
+        } else {
+          player.vy = jumpVelocity * 0.9
+        }
+        player.y = o.y - player.height
+        player.onGround = false
+      } else if (minOverlapY < minOverlapX && player.vy < 0 && player.y > o.y) {
+        // Hit from below: small penalty tap
+        player.vy = 200
+        consumeCharge(8 * dtRaw)
+      } else {
+        // Side impact = lethal
+        gameOver.value = true
+        deathByEnemy = true
+      }
     }
   }
 }
@@ -670,11 +902,8 @@ function update(dt) {
 function draw() {
   ctx.clearRect(0, 0, width, height)
 
-  // Background layers
-
   const pulse = 20 + bassEnergy * 80
   ctx.fillStyle = `rgb(${2 + pulse}, 6, 23)`
-
   ctx.fillRect(0, 0, width, height)
 
   // Parallax stripes
@@ -708,7 +937,6 @@ function draw() {
     analyser.getByteFrequencyData(freqData)
     analyser.getByteTimeDomainData(timeData)
 
-    // === BASS BARS (LOW FREQ) ===
     const barCount = 32
     const barWidth = width / barCount
 
@@ -725,7 +953,6 @@ function draw() {
       )
     }
 
-    // === WAVEFORM LINE ===
     ctx.save()
     ctx.strokeStyle = 'rgba(250, 204, 21, 0.7)'
     ctx.lineWidth = 2
@@ -747,13 +974,13 @@ function draw() {
     ctx.stroke()
     ctx.restore()
   }
+
   // Player
   const playerColor = gameOver.value && deathByEnemy
     ? 'transparent'
     : gameOver.value
     ? '#f97316'
     : '#22c55e'
-
 
   ctx.save()
   ctx.translate(
@@ -762,7 +989,6 @@ function draw() {
   )
   ctx.rotate(rotation)
 
-  // body
   ctx.fillStyle = playerColor
   ctx.fillRect(
     -player.width / 2,
@@ -771,11 +997,9 @@ function draw() {
     player.height
   )
 
-  // enemy-death impact crack (no face)
   if (gameOver.value && deathByEnemy) {
     ctx.strokeStyle = '#020617'
     ctx.lineWidth = 2
-
     ctx.beginPath()
     ctx.moveTo(-14, -14)
     ctx.lineTo(14, 14)
@@ -783,10 +1007,7 @@ function draw() {
     ctx.lineTo(-14, 14)
     ctx.stroke()
   }
-
   ctx.restore()
-
-
 
   // Player glow
   ctx.save()
@@ -797,7 +1018,7 @@ function draw() {
   ctx.strokeRect(player.x, player.y, player.width, player.height)
   ctx.restore()
 
-  // PLAYER SHATTER FRAGMENTS
+  // Player fragments
   for (const f of playerFragments) {
     ctx.save()
     ctx.globalAlpha = f.alpha
@@ -811,6 +1032,7 @@ function draw() {
     ctx.restore()
   }
 
+  // Ground shockwaves
   for (const s of shockwaves) {
     ctx.save()
     ctx.globalAlpha = s.alpha
@@ -821,19 +1043,18 @@ function draw() {
     ctx.stroke()
     ctx.restore()
   }
-  // SONIC BOOM BURSTS
+
+  // Sonic bursts
   for (const s of sonicBursts) {
     ctx.save()
     ctx.globalAlpha = s.alpha
 
-    // Outer ring
     ctx.strokeStyle = '#f97316'
     ctx.lineWidth = 6
     ctx.beginPath()
     ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2)
     ctx.stroke()
 
-    // Inner hot core
     ctx.strokeStyle = '#fde68a'
     ctx.lineWidth = 2
     ctx.beginPath()
@@ -843,7 +1064,7 @@ function draw() {
     ctx.restore()
   }
 
-  // FLOATING BONUS SCORE
+  // Score pops
   for (const p of scorePops) {
     ctx.save()
     ctx.globalAlpha = p.alpha
@@ -856,11 +1077,8 @@ function draw() {
 
   // Obstacles
   ctx.fillStyle = '#38bdf8'
-
   for (const o of obstacles) {
     ctx.fillRect(o.x, o.y, o.width, o.height)
-
-    // mini top indicator for vibe
     ctx.save()
     ctx.globalAlpha = 0.7
     ctx.fillStyle = '#f97316'
@@ -868,6 +1086,7 @@ function draw() {
     ctx.restore()
   }
 
+  // Enemies
   for (const e of enemies) {
     ctx.save()
 
@@ -902,7 +1121,12 @@ function draw() {
       }
 
       if (e.type === 'floater') {
-        ctx.fillStyle = '#a855f7'
+        const rage = e.rage ?? 0
+        const r = Math.round(168 + rage * 60)
+        const g = Math.round(85 - rage * 40)
+        const b = Math.round(247 - rage * 80)
+        ctx.fillStyle = `rgb(${r},${Math.max(g, 0)},${Math.max(b, 80)})`
+
         ctx.beginPath()
         ctx.arc(e.width / 2, e.height / 2, e.width / 2, 0, Math.PI * 2)
         ctx.fill()
@@ -914,14 +1138,16 @@ function draw() {
         ctx.fill()
       }
     }
-
     ctx.restore()
+
   }
+
+  drawHUD()
 }
 
 function loop(timestamp) {
   if (!lastTimestamp) lastTimestamp = timestamp
-  const dt = (timestamp - lastTimestamp) / 1000 // seconds
+  const dt = (timestamp - lastTimestamp) / 1000
   lastTimestamp = timestamp
 
   update(dt)
@@ -930,28 +1156,44 @@ function loop(timestamp) {
   animationId = requestAnimationFrame(loop)
 }
 
-
 function handleKeydown(e) {
-  if (e.code === 'Space' || e.code === 'ArrowUp') {
+  // JUMP
+  if (e.code === 'Space') {
     e.preventDefault()
     handleJump()
   }
 
-  if (e.code === 'ArrowDown' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+  // SLAM
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
     e.preventDefault()
     handleSlam()
   }
+
+  // HANG
+  if (e.code === 'ArrowUp') {
+    hangHeld = true
+  }
+
+  // SLOW
+  if (e.code === 'ArrowDown') {
+    slowHeld = true
+  }
 }
+
+
+function handleKeyup(e) {
+  if (e.code === 'ArrowUp') hangHeld = false
+  if (e.code === 'ArrowDown') slowHeld = false
+}
+
 
 function handleClick() {
   handleJump()
 }
 
-
 onMounted(() => {
   const c = canvas.value
   if (!c) return
-  // Responsive-ish: size based on container width
   const rect = c.parentElement.getBoundingClientRect()
   width = Math.min(960, rect.width - 16)
   height = 400
@@ -965,6 +1207,7 @@ onMounted(() => {
   animationId = requestAnimationFrame(loop)
 
   window.addEventListener('keydown', handleKeydown)
+  window.addEventListener('keyup', handleKeyup)
   c.addEventListener('click', handleClick)
   c.addEventListener('touchstart', (e) => {
     e.preventDefault()
@@ -977,6 +1220,7 @@ onUnmounted(() => {
   if (beatIntervalId) clearInterval(beatIntervalId)
   if (obstacleSpawnIntervalId) clearInterval(obstacleSpawnIntervalId)
   window.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('keyup', handleKeyup)
   const c = canvas.value
   if (c) {
     c.removeEventListener('click', handleClick)
