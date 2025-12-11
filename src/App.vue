@@ -7,13 +7,13 @@
     </header>
 
     <main class="app-main">
-      <BeatRunnerGame />
+      <HoppyBlockGame />
     </main>
   </div>
 </template>
 
 <script setup>
-import BeatRunnerGame from './components/BeatRunnerGame.vue'
+import HoppyBlockGame from './components/HoppyBlockGame.vue'
 </script>
 
 <style scoped>
@@ -51,4 +51,3 @@ import BeatRunnerGame from './components/BeatRunnerGame.vue'
   padding: 1.5rem;
 }
 </style>
-
