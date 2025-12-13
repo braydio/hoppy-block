@@ -17,6 +17,20 @@
         <span class="label">Hoppy Block</span>
         <span class="value">{{ bpm }} BPM</span>
       </div>
+      <div class="hud-item hud-difficulty">
+        <span class="label">Difficulty</span>
+        <div class="difficulty-toggle">
+          <button
+            v-for="opt in difficultyOptions"
+            :key="opt.id"
+            class="difficulty-button"
+            :class="{ 'difficulty-button--active': difficulty === opt.id }"
+            @click="setDifficulty(opt.id)"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+      </div>
       <div class="hud-audio">
         <label class="audio-label">
           <span>Track</span>
@@ -35,10 +49,44 @@
     >
       <canvas ref="canvas" class="game-canvas"></canvas>
 
+      <div
+        v-if="snapshotMessageTimer > 0"
+        class="replay-toast"
+      >
+        <div class="replay-title">Tricky!</div>
+        <div class="replay-sub">Instant replay captured!</div>
+      </div>
+
+      <div
+        v-if="replayVisible && replayVideoUrl"
+        class="replay-pip"
+      >
+        <video
+          :key="replayPlaybackKey"
+          :src="replayVideoUrl"
+          class="replay-video"
+          autoplay
+          muted
+          playsinline
+        ></video>
+      </div>
+
       <div v-if="gameOver" class="overlay">
         <div class="overlay-card">
           <h2>Game Over</h2>
           <p>Your score: {{ Math.floor(score) }}</p>
+          <div class="score-save" v-if="canSaveScore">
+            <input
+              class="name-input"
+              type="text"
+              v-model="playerName"
+              maxlength="16"
+              placeholder="Your name"
+            />
+            <button class="save-button" @click="saveHighScore">
+              Save Score
+            </button>
+          </div>
           <p class="help">
             Press <kbd>Space</kbd> or click to restart.
           </p>
@@ -46,44 +94,48 @@
       </div>
 
       <div v-if="!started && !gameOver" class="overlay">
-        <div class="overlay-card">
-          <template v-if="countdownTimer > 0">
-            <h2>Get Ready</h2>
-            <p style="font-size: 2.5rem; margin: 0.4rem 0;">{{ Math.ceil(countdownTimer) }}</p>
-          </template>
-          <template v-else>
-            <h2>Hoppy Block</h2>
+        <div class="overlay-card" :class="{ 'overlay-card--collapse': introCollapsing }">
+          <h2>Hoppy Block</h2>
 
-            <p><kbd>{{ keyLabel(keybinds.jump) }}</kbd> — Jump</p>
-            <p><kbd>{{ keyLabel(keybinds.slam) }}</kbd> — Slam</p>
-            <p><kbd>{{ keyLabel(keybinds.antigrav) }}</kbd> — Antigrav</p>
-            <p><kbd>{{ keyLabel(keybinds.slowmo) }}</kbd> — Slow-Mo</p>
-            <p><kbd>{{ keyLabel(keybinds.blast) }}</kbd> — Beat Blast</p>
-            <p><kbd>{{ keyLabel(keybinds.phase) }}</kbd> — Phase Shift</p>
-            <p><kbd>{{ keyLabel(keybinds.parry) }}</kbd> — Beat Parry</p>
+          <p><kbd>{{ keyLabel(keybinds.jump) }}</kbd> — Jump</p>
+          <p><kbd>{{ keyLabel(keybinds.slam) }}</kbd> — Slide / Slam</p>
+          <p><kbd>{{ keyLabel(keybinds.antigrav) }}</kbd> — Antigrav</p>
+          <p><kbd>{{ keyLabel(keybinds.slowmo) }}</kbd> — Slow-Mo</p>
+          <p><kbd>{{ keyLabel(keybinds.blast) }}</kbd> — Beat Blast</p>
+          <p><kbd>{{ keyLabel(keybinds.phase) }}</kbd> — Phase Shift</p>
+          <p><kbd>{{ keyLabel(keybinds.parry) }}</kbd> — Beat Parry</p>
 
-            <p class="help" style="margin-top: 0.6rem;">
-            Slam Gombas for bonus energy.
-            Don't slam the Spikers.
-            Blast on-beat to shred everything.
-            </p>
-          </template>
+          <p class="help" style="margin-top: 0.6rem;">
+          Slam Gombas for bonus energy.
+          Slide clears ground foes.
+          Blast on-beat to shred everything.
+          </p>
         </div>
       </div>
 
 
     </div>
 
-    <p class="controls">
-    Controls:
-    <kbd>{{ keyLabel(keybinds.jump) }}</kbd> Jump ·
-    <kbd>{{ keyLabel(keybinds.slam) }}</kbd> Slam ·
-    <kbd>{{ keyLabel(keybinds.antigrav) }}</kbd> Antigrav ·
-    <kbd>{{ keyLabel(keybinds.slowmo) }}</kbd> Slow-Mo ·
-    <kbd>{{ keyLabel(keybinds.blast) }}</kbd> Blast ·
-    <kbd>{{ keyLabel(keybinds.phase) }}</kbd> Phase Shift ·
-    <kbd>{{ keyLabel(keybinds.parry) }}</kbd> Parry
-    </p>
+    <div class="controls">
+      <div class="controls-row">
+        <span class="controls-label">Controls</span>
+      </div>
+      <div class="controls-row">
+        <kbd>{{ keyLabel(keybinds.jump) }}</kbd> Jump
+      </div>
+      <div class="controls-row">
+        <kbd>{{ keyLabel(keybinds.slam) }}</kbd> Slide / Slam
+      </div>
+      <div class="controls-row">
+        <kbd>{{ keyLabel(keybinds.antigrav) }}</kbd> Antigrav ·
+        <kbd>{{ keyLabel(keybinds.slowmo) }}</kbd> Slow-Mo
+      </div>
+      <div class="controls-row">
+        <kbd>{{ keyLabel(keybinds.blast) }}</kbd> Blast ·
+        <kbd>{{ keyLabel(keybinds.phase) }}</kbd> Phase Shift ·
+        <kbd>{{ keyLabel(keybinds.parry) }}</kbd> Parry
+      </div>
+    </div>
 
     <section class="keybinds-panel">
       <header class="keybinds-header">
@@ -143,6 +195,32 @@
         </label>
       </div>
     </section>
+
+    <section class="scoreboard-panel">
+      <header class="keybinds-header">
+        <h3>High Scores</h3>
+        <p>Top 10 runs (local to this browser)</p>
+      </header>
+      <transition-group name="score-slide" tag="div" class="scoreboard-list">
+        <div
+          v-for="(entry, idx) in highScores"
+          :key="entry.id || entry.name + entry.score + entry.date + idx"
+          class="score-row"
+          :class="{
+            'score-row--placeholder': entry.placeholder,
+            'score-row--new': savedCurrentRun && !entry.placeholder && idx === lastSavedIndex
+          }"
+        >
+          <span class="score-rank">#{{ idx + 1 }}</span>
+          <span class="score-name">{{ entry.name }}</span>
+          <span class="score-value">{{ entry.score }}</span>
+          <span class="score-date">{{ entry.date }}</span>
+        </div>
+        <p v-if="highScores.length === 0" class="score-empty" key="empty">
+          No runs yet. Finish a game to record your score.
+        </p>
+      </transition-group>
+    </section>
   </div>
 </template>
 
@@ -164,9 +242,22 @@ const charge = ref(0) // 0–100 power meter
 const dashReady = ref(false)
 const phaseReady = ref(false)
 const phaseCooldown = ref(0)
-const countdownTimer = ref(0)
+const introCollapsing = ref(false)
 const beatWindowMs = ref(90)
 const colorblindMode = ref(false)
+const highScores = ref([])
+const playerName = ref('Player')
+const canSaveScore = ref(false)
+const savedCurrentRun = ref(false)
+const savingHighScore = ref(false)
+const placeholderIndex = ref(null)
+const lastSavedIndex = ref(null)
+const difficulty = ref('medium')
+const difficultyOptions = [
+  { id: 'easy', label: 'Easy' },
+  { id: 'medium', label: 'Medium' },
+  { id: 'hard', label: 'Hard' },
+]
 
 let ctx = null
 let width = 900
@@ -210,6 +301,14 @@ let deathByEnemy = false
 let playerFragments = []
 let dashActive = false
 let dashTimer = 0
+let dashVelocity = 0
+let slideActive = false
+let slideTimer = 0
+let slideStartX = 0
+let slideJumped = false
+let slideElapsed = 0
+let slideTargetX = 0
+let flashTimer = 0
 let phaseActive = false
 let phaseTimer = 0
 let phaseModeIndex = 0
@@ -223,8 +322,15 @@ let airJumps = 1
 let beatStreak = 0
 let scoreMultiplier = 1
 let lastBeatActionTime = 0
+let airComboMultiplier = 1
+let airComboStreak = 0
+let slamOriginY = null
 let dashGhosts = []
 let deathSlowTimer = 0
+let wasGameOver = false
+let replayRecorder = null
+let replayBuffer = []
+let replayStopTimeout = null
 const keybindOptions = [
   { id: 'jump', label: 'Jump' },
   { id: 'slam', label: 'Slam' },
@@ -245,6 +351,13 @@ const defaultKeybinds = {
 }
 const keybinds = reactive({ ...defaultKeybinds })
 const editingKey = ref(null)
+const snapshotMessageTimer = ref(0)
+const replayVideoUrl = ref(null)
+const replayVisible = ref(false)
+const replayPlaybackKey = ref(0)
+const replayVideoUrl = ref(null)
+const replayVisible = ref(false)
+const replayPlaybackKey = ref(0)
 
 // global song energy (0–1)
 let songIntensity = 0
@@ -254,13 +367,24 @@ let hangActive = false
 let slowActive = false
 const DASH_WINDOW_MS = 110
 const DASH_DURATION = 0.24
+const DASH_THRUST = 900
+const PLAYER_ANCHOR_X = 150
 const DASH_RANGE = 200
 const DASH_COST = 16
+const SLIDE_DURATION = 0.6
+const SLIDE_DISTANCE = 150
+const SLIDE_CROUCH_DURATION = 0.1
+const SLIDE_DASH_DURATION = 0.12
+const SLIDE_GLIDE_DURATION = 0.08
+const SLIDE_FLIP_DURATION = 0.2
 const PHASE_DURATION = 10
 const PHASE_COST = 20
 const PHASE_COOLDOWN = 20
 const DOUBLE_JUMP_COST = 10
 const PARRY_COST = 6
+const INTENSE_SLAM_HEIGHT = 180
+const AIR_COMBO_STEP = 0.35
+const AIR_COMBO_MAX = 3.2
 const MAX_MULTIPLIER = 3
 const CHARGE_DRAIN_RATE = 30
 const CHARGE_REGEN_GROUND = 40
@@ -330,6 +454,12 @@ const PHASE_PALETTES = {
   },
 }
 
+const DIFFICULTY_PRESETS = {
+  easy: { speedMult: 0.9, spawnRate: 0.78, uniformity: 0.85 },
+  medium: { speedMult: 1, spawnRate: 1, uniformity: 0.45 },
+  hard: { speedMult: 1.15, spawnRate: 1.35, uniformity: 0.15 },
+}
+
 function normalizeBind(bind) {
   if (!bind) return []
   return Array.isArray(bind) ? bind : [bind]
@@ -347,6 +477,16 @@ function keyLabel(bind) {
     Space: 'Space',
     ShiftLeft: 'Shift',
     ShiftRight: 'Shift',
+  }
+
+  const letterMatch = key.match(/^Key([A-Z])$/)
+  if (letterMatch) {
+    return letterMatch[1]
+  }
+
+  const digitMatch = key.match(/^Digit([0-9])$/)
+  if (digitMatch) {
+    return digitMatch[1]
   }
 
   return map[key] ?? key
@@ -402,6 +542,16 @@ function withAlpha(rgb, alpha) {
   return rgb
 }
 
+function getDifficultySettings() {
+  return DIFFICULTY_PRESETS[difficulty.value] || DIFFICULTY_PRESETS.medium
+}
+
+function applyDifficultySettings() {
+  const settings = getDifficultySettings()
+  baseScrollSpeed = 380 * settings.speedMult
+  scrollSpeed = baseScrollSpeed * speed.value
+}
+
 let hangHeld = false
 let slowHeld = false
 
@@ -446,12 +596,78 @@ function syncScore() {
   score.value = baseScore.value + bonusScore.value
 }
 function addBonus(points) {
-  bonusScore.value += points * scoreMultiplier
+  bonusScore.value += points * scoreMultiplier * airComboMultiplier
   syncScore()
 }
 function addBase(points) {
   baseScore.value += points * scoreMultiplier
   syncScore()
+}
+function triggerReplayCapture() {
+  if (!canvas.value || typeof MediaRecorder === 'undefined') return
+
+  snapshotMessageTimer.value = 3
+
+  const now = performance.now()
+  const startTime = now - 5000
+  const recent = replayBuffer.filter(c => c.t >= startTime)
+  if (!recent.length) return
+
+  const blob = new Blob(recent.map(r => r.data), { type: recent[0].type || 'video/webm' })
+  if (replayVideoUrl.value) URL.revokeObjectURL(replayVideoUrl.value)
+  replayVideoUrl.value = URL.createObjectURL(blob)
+  replayPlaybackKey.value += 1
+  replayVisible.value = true
+
+  setTimeout(() => {
+    replayVisible.value = false
+    if (replayVideoUrl.value) {
+      URL.revokeObjectURL(replayVideoUrl.value)
+      replayVideoUrl.value = null
+    }
+  }, 6000)
+}
+function triggerSquishBounce(intensity = 1) {
+  const airborneBefore = !player.onGround
+  const bounceScale = Math.max(0.6, intensity)
+  player.vy = jumpVelocity * 0.7 * bounceScale
+  player.onGround = false
+  player.y = Math.min(player.y, groundY - player.height - 2)
+
+  if (airborneBefore) {
+    airComboMultiplier = clamp(
+      airComboMultiplier + AIR_COMBO_STEP * bounceScale,
+      1,
+      AIR_COMBO_MAX
+    )
+    airComboStreak += 1
+    if (airComboStreak >= 3) {
+      triggerReplayCapture()
+      airComboStreak = 0
+    }
+  } else {
+    airComboMultiplier = 1 + AIR_COMBO_STEP * 0.5
+    airComboStreak = 1
+  }
+}
+function loadHighScores() {
+  try {
+    const raw = localStorage.getItem('hoppy-highscores')
+    if (raw) {
+      highScores.value = JSON.parse(raw)
+    }
+    const storedName = localStorage.getItem('hoppy-name')
+    if (storedName) playerName.value = storedName
+  } catch (err) {
+    console.warn('high score load failed', err)
+  }
+}
+function persistHighScores() {
+  try {
+    localStorage.setItem('hoppy-highscores', JSON.stringify(highScores.value))
+  } catch (err) {
+    console.warn('high score save failed', err)
+  }
 }
 
 function resetGame() {
@@ -471,11 +687,12 @@ function resetGame() {
   jumpVelocity = -1050
   baseScrollSpeed = 380
   scrollSpeed = baseScrollSpeed
+  applyDifficultySettings()
   lastTimestamp = null
   songIntensity = 0
 
   player = {
-    x: 150,
+    x: PLAYER_ANCHOR_X,
     y: groundY - 50,
     width: 40,
     height: 40,
@@ -495,6 +712,7 @@ function resetGame() {
   playerFragments = []
   dashActive = false
   dashTimer = 0
+  dashVelocity = 0
   dashReady.value = false
   phaseReady.value = false
   phaseCooldown.value = 0
@@ -505,9 +723,33 @@ function resetGame() {
   airJumps = 1
   beatStreak = 0
   scoreMultiplier = 1
+  airComboMultiplier = 1
+  airComboStreak = 0
   lastBeatActionTime = 0
+  slamOriginY = null
   dashGhosts = []
   deathSlowTimer = 0
+  snapshotMessageTimer.value = 0
+  replayVisible.value = false
+  if (replayVideoUrl.value) {
+    URL.revokeObjectURL(replayVideoUrl.value)
+    replayVideoUrl.value = null
+  }
+  replayBuffer = []
+  slideActive = false
+  slideTimer = 0
+  slideJumped = false
+  slideElapsed = 0
+  slideTargetX = 0
+  flashTimer = 0
+  introCollapsing.value = false
+  started.value = false
+  canSaveScore.value = false
+  savedCurrentRun.value = false
+  savingHighScore.value = false
+  placeholderIndex.value = null
+  lastSavedIndex.value = null
+  wasGameOver = false
 }
 
 async function configureAudio(trackUrl, getArrayBuffer) {
@@ -611,6 +853,9 @@ async function configureAudio(trackUrl, getArrayBuffer) {
   }
 
   audioStarted = false
+  lastBeatTime = performance.now()
+  lastSubBeatTime = lastBeatTime
+  beatIndex = 0
 }
 
 async function handleAudioUpload(e) {
@@ -693,6 +938,7 @@ function spawnEnemy(type) {
       currentHeight: 28,
       bob: 0,
       squash: 1,
+      confident: true,
     }
   }
 
@@ -711,6 +957,9 @@ function spawnEnemy(type) {
       currentHeight: 34,
       bob: 0,
       squash: 1,
+      confident: true,
+      spikes: true,
+      concerned: false,
     }
   }
 
@@ -806,21 +1055,41 @@ function spawnFormation(kind) {
   }
 }
 
+function pulseEnemiesOnBeat(strength = 1) {
+  for (const e of enemies) {
+    if (!e.alive || e.squished) continue
+    e.squashImpulse = (e.squashImpulse || 0) + 0.35 * strength
+    e.beatBob = (e.beatBob || 0) + 8 * strength
+    if (e.band === 'high') {
+      e.phase = 0
+    }
+  }
+}
+
 function spawnBeatDrivenEntities(isSubBeat, beatMs) {
+  const diff = getDifficultySettings()
+  const uniformity = diff.uniformity ?? 0.5
   const beatsSinceEnemy = beatIndex - lastEnemySpawnBeat
   const beatsSinceObstacle = beatIndex - lastObstacleSpawnBeat
 
   const intensity = clamp(songIntensity, 0, 1)
-  const spawnChance = isSubBeat
+  const spawnNoise = (Math.random() - 0.5) * (1 - uniformity) * 0.35
+  const spawnChance = ((isSubBeat
     ? 0.1 + intensity * 0.25
-    : 0.2 + intensity * 0.35
+    : 0.2 + intensity * 0.35) + spawnNoise) * diff.spawnRate
 
-  const formationChance = !isSubBeat && intensity > 0.35 ? 0.15 : 0
-  if (!isSubBeat && Math.random() < formationChance && beatsSinceEnemy >= 1.5) {
+  const formationChance = !isSubBeat && intensity > 0.35
+    ? (0.15 - uniformity * 0.08) * diff.spawnRate
+    : 0
+
+  const minBeatGapBase = isSubBeat ? 0.5 : 1
+  const minBeatGap = minBeatGapBase + uniformity * 0.25 - (1 - uniformity) * 0.1
+
+  if (!isSubBeat && Math.random() < formationChance && beatsSinceEnemy >= minBeatGap + 0.4) {
     const form = intensity > 0.6 ? 'stagger' : 'triple-line'
     spawnFormation(form)
     lastEnemySpawnBeat = beatIndex + 1
-  } else if (beatsSinceEnemy >= (isSubBeat ? 0.5 : 1) && Math.random() < spawnChance) {
+  } else if (beatsSinceEnemy >= minBeatGap && Math.random() < spawnChance) {
     const type = pickEnemyByEnergy()
     if (type) {
       if (!isSubBeat && intensity > 0.6 && Math.random() < 0.25) {
@@ -832,8 +1101,10 @@ function spawnBeatDrivenEntities(isSubBeat, beatMs) {
     }
   }
 
-  const obstacleChance = 0.12 + intensity * 0.28 + highEnergy * 0.18
-  if (!isSubBeat && beatsSinceObstacle >= 1.5 && Math.random() < obstacleChance) {
+  const obstacleNoise = (Math.random() - 0.5) * (1 - uniformity) * 0.25
+  const obstacleChance = (0.12 + intensity * 0.28 + highEnergy * 0.18 + obstacleNoise) * diff.spawnRate
+  const minObstacleGap = 1 + uniformity * 0.25
+  if (!isSubBeat && beatsSinceObstacle >= minObstacleGap && Math.random() < obstacleChance) {
     spawnObstacle()
     lastObstacleSpawnBeat = beatIndex
   }
@@ -879,7 +1150,7 @@ function drawHUD() {
   ctx.fillStyle = phaseActive ? '#c084fc' : phaseReady.value ? '#a855f7' : '#475569'
   ctx.fillText(`${keyLabel(keybinds.phase)} PHASE SHIFT`, pad + 240, pad + 28)
   ctx.fillStyle = scoreMultiplier > 1 ? '#fcd34d' : '#94a3b8'
-  ctx.fillText(`x${scoreMultiplier.toFixed(2)} MULT`, pad + 380, pad + 28)
+  // moved combo readout near intensity meter
   ctx.restore()
 
   // === BPM + Intensity ===
@@ -906,6 +1177,9 @@ function drawHUD() {
   ctx.fillStyle = '#e5e7eb'
   ctx.fillText('INTENSITY', bpmX, pad + 40)
 
+  ctx.fillStyle = '#fcd34d'
+  ctx.fillText(`Combo X${Math.max(1, beatStreak)}`, bpmX, pad + 56)
+
   ctx.restore()
 }
 async function startAudio() {
@@ -917,6 +1191,15 @@ async function startAudio() {
 
   audio.playbackRate = 1.0
   try {
+    if (audio.readyState < 2) {
+      await new Promise(resolve => {
+        const onCanPlay = () => {
+          audio.removeEventListener('canplay', onCanPlay)
+          resolve()
+        }
+        audio.addEventListener('canplay', onCanPlay)
+      })
+    }
     await audio.play()
   } catch (err) {
     console.warn('Autoplay blocked, waiting for interaction', err)
@@ -952,12 +1235,8 @@ function maybeGrantBeatJumpCharge() {
 
 function handleJump() {
   startAudio()
-  if (!started.value && countdownTimer.value <= 0 && !gameOver.value) {
-    countdownTimer.value = 2.5
-  }
-  if (countdownTimer.value > 0 && !started.value) return
   if (!started.value && !gameOver.value) {
-    started.value = true
+    beginRun()
   }
 
   if (gameOver.value) {
@@ -994,12 +1273,14 @@ function handleJump() {
 
 function handleSlam() {
   startAudio()
-  if (!started.value && countdownTimer.value <= 0 && !gameOver.value) {
-    countdownTimer.value = 2.5
+  if (!started.value && !gameOver.value) {
+    beginRun()
   }
-  if (countdownTimer.value > 0 && !started.value) return
-  if (!player.onGround && !isSlamming && !gameOver.value) {
+  if (player.onGround && !gameOver.value) {
+    startSlide()
+  } else if (!player.onGround && !isSlamming && !gameOver.value) {
     isSlamming = true
+    slamOriginY = player.y
     player.vy = 2000 // aggressive downward force
   }
 }
@@ -1007,12 +1288,10 @@ function handleSlam() {
 function handlePhase() {
   startAudio()
   if (gameOver.value) return
-  if (!started.value && countdownTimer.value <= 0 && !gameOver.value) {
-    countdownTimer.value = 2.5
+  if (!started.value && !gameOver.value) {
+    beginRun()
   }
-  if (countdownTimer.value > 0 && !started.value) return
   if (charge.value < PHASE_COST || phaseActive || phaseCooldown.value > 0) return
-  if (!started.value) started.value = true
 
   phaseActive = true
   phaseTimer = PHASE_DURATION
@@ -1034,12 +1313,8 @@ function handlePhase() {
 function handleBlast() {
   startAudio()
   if (gameOver.value) return
-  if (!started.value && countdownTimer.value <= 0 && !gameOver.value) {
-    countdownTimer.value = 2.5
-  }
-  if (countdownTimer.value > 0 && !started.value) return
-  if (!started.value) {
-    started.value = true
+  if (!started.value && !gameOver.value) {
+    beginRun()
   }
 
   const beatMs = 60000 / bpm.value
@@ -1048,18 +1323,13 @@ function handleBlast() {
     ? Math.min(Math.abs(now - lastBeatTime), Math.abs(lastBeatTime + beatMs - now))
     : Infinity
 
-  if (countdownTimer.value > 0) {
-    countdownTimer.value = Math.max(0, countdownTimer.value - dtRaw)
-    if (countdownTimer.value === 0) {
-      started.value = true
-    }
-  }
   const onTime = beatDist < DASH_WINDOW_MS
 
   if (onTime && charge.value >= DASH_COST && !dashActive) {
     consumeCharge(DASH_COST)
     dashActive = true
     dashTimer = DASH_DURATION
+    dashVelocity = DASH_THRUST
     isSlamming = false
     registerBeatAction(true)
 
@@ -1078,11 +1348,9 @@ function handleBlast() {
 function handleParry() {
   startAudio()
   if (gameOver.value) return
-  if (!started.value && countdownTimer.value <= 0 && !gameOver.value) {
-    countdownTimer.value = 2.5
+  if (!started.value && !gameOver.value) {
+    beginRun()
   }
-  if (countdownTimer.value > 0 && !started.value) return
-  if (!started.value) started.value = true
 
   const onBeat = isOnBeat(70)
   if (!onBeat && charge.value < PARRY_COST) return
@@ -1191,9 +1459,36 @@ function applyBlastStrikes() {
     shockwaves.push({
       x: player.x + player.width / 2 + 40,
       y: player.y + player.height / 2,
-      r: 20,
+      w: 80,
+      h: 12,
       alpha: 0.5,
     })
+  }
+}
+
+function applySlideStrike() {
+  const slideLeft = Math.min(slideStartX, slideStartX + SLIDE_DISTANCE)
+  const slideRight = Math.max(slideStartX, slideStartX + SLIDE_DISTANCE)
+  const hitTop = groundY - 48
+  const hitBottom = groundY + 4
+
+  for (const e of enemies) {
+    if (!e.alive || e.squished) continue
+    if (e.y + e.height < hitTop || e.y > hitBottom) continue
+    const overlaps = e.x < slideRight && e.x + e.width > slideLeft
+    if (overlaps) {
+      e.alive = false
+      e.squished = true
+      e.squishTimer = 0.14
+      e.currentHeight = e.height
+      addBonus(220)
+      sonicBursts.push({
+        x: e.x + e.width / 2,
+        y: e.y + e.height / 2,
+        r: 0,
+        alpha: 0.75,
+      })
+    }
   }
 }
 
@@ -1202,6 +1497,8 @@ function update(dtRaw) {
   const dt = dtRaw
   const beatMs = 60000 / bpm.value
   const now = performance.now()
+  const prevGameOver = wasGameOver
+  wasGameOver = gameOver.value
   const beatDist = lastBeatTime
     ? Math.min(Math.abs(now - lastBeatTime), Math.abs(lastBeatTime + beatMs - now))
     : Infinity
@@ -1213,7 +1510,12 @@ function update(dtRaw) {
     dashTimer -= dtRaw
     if (dashTimer <= 0) {
       dashActive = false
+      dashVelocity = 0
     } else {
+      player.x += dashVelocity * dtRaw
+      dashVelocity = lerp(dashVelocity, 0, dtRaw * 8)
+      const maxLead = PLAYER_ANCHOR_X + 180
+      player.x = clamp(player.x, 40, maxLead)
       applyBlastStrikes()
       dashGhosts.push({
         x: player.x,
@@ -1223,6 +1525,61 @@ function update(dtRaw) {
         alpha: 0.45,
       })
       dashGhosts = dashGhosts.slice(-10)
+    }
+  } else if (!slideActive) {
+    player.x = lerp(player.x, PLAYER_ANCHOR_X, dtRaw * 3.2)
+  }
+
+  if (snapshotMessageTimer.value > 0) {
+    snapshotMessageTimer.value = Math.max(0, snapshotMessageTimer.value - dtRaw)
+  }
+
+  if (slideActive) {
+    slideTimer -= dtRaw
+    slideElapsed += dtRaw
+    const crouchEnd = SLIDE_CROUCH_DURATION
+    const dashEnd = SLIDE_CROUCH_DURATION + SLIDE_DASH_DURATION
+    const glideEnd = dashEnd + SLIDE_GLIDE_DURATION
+    const flipEnd = glideEnd + SLIDE_FLIP_DURATION
+
+    if (slideElapsed < crouchEnd) {
+      player.x = slideStartX
+      player.y = groundY - player.height
+      player.vy = 0
+      rotation = -0.25
+    } else if (slideElapsed < dashEnd) {
+      const t = clamp((slideElapsed - crouchEnd) / SLIDE_DASH_DURATION, 0, 1)
+      const eased = 1 - Math.pow(1 - t, 3) // aggressive ease-out
+      player.x = lerp(slideStartX, slideTargetX, eased)
+      player.y = groundY - player.height
+      player.vy = 0
+      rotation = 0.05
+      applySlideStrike()
+    } else if (slideElapsed < glideEnd) {
+      const t = clamp((slideElapsed - dashEnd) / SLIDE_GLIDE_DURATION, 0, 1)
+      const eased = 1 - Math.pow(t, 2)
+      player.x = lerp(slideTargetX, slideTargetX - 18, 1 - eased)
+      player.y = groundY - player.height
+      rotation = -0.05
+    } else if (slideElapsed < flipEnd) {
+      const t = clamp((slideElapsed - glideEnd) / SLIDE_FLIP_DURATION, 0, 1)
+      const backX = lerp(slideTargetX, slideStartX, t)
+      const lift = Math.sin(t * Math.PI) * (player.height * 0.85)
+      player.x = backX
+      player.y = groundY - player.height - lift
+      if (!slideJumped) {
+        player.vy = jumpVelocity * 0.28
+        slideJumped = true
+      }
+      rotation = -t * Math.PI * 2.4
+    } else {
+      slideActive = false
+      slideJumped = false
+      player.x = slideStartX
+      player.y = groundY - player.height
+      player.vy = 0
+      player.onGround = true
+      rotation = 0
     }
   }
 
@@ -1264,7 +1621,6 @@ function update(dtRaw) {
   if (audio && audio._slapMix && !phaseActive) {
     audio._slapMix.gain.value = 0
   }
-
 
   if (audio && audio._drive && audio._dryGain && audio._wetGain) {
     if (hangActive) {
@@ -1315,13 +1671,13 @@ function update(dtRaw) {
   }
 
   // Camera shake & hat bursts
-  cameraShake = lerp(cameraShake, 0, 0.08)
-  if (beatPulse.value && bassEnergy > 0.45) {
-    cameraShake = Math.min(12, cameraShake + bassEnergy * 4)
-  }
+  const targetShake = started.value && !gameOver.value
+    ? (beatPulse.value ? bassEnergy * 5 : 0) + songIntensity * 1.4
+    : 0
+  cameraShake = lerp(cameraShake, targetShake, 0.16)
 
-  if (beatPulse.value && highEnergy > 0.45) {
-    const count = 4 + Math.floor(highEnergy * 6)
+  if (started.value && !gameOver.value && beatPulse.value && highEnergy > 0.6) {
+    const count = 2 + Math.floor(highEnergy * 3)
     for (let i = 0; i < count; i++) {
       hatBursts.push({
         x: Math.random() * width,
@@ -1357,20 +1713,21 @@ function update(dtRaw) {
 
   // Enemy dance & rage
   for (const e of enemies) {
-    if (e.band === 'bass') {
-      e.squash = 1 + beatPulseStrength * bassEnergy * 0.6
-      e.bob = -beatPulseStrength * 10 * bassEnergy
-    }
+    e.squashImpulse = (e.squashImpulse || 0) * 0.86
+    e.beatBob = (e.beatBob || 0) * 0.82
+    const squashImpulse = e.squashImpulse || 0
+    const beatBob = e.beatBob || 0
+    e.dancePhase = (e.dancePhase || Math.random() * Math.PI * 2) + dt * 2.4
 
-    if (e.band === 'mid') {
-      e.squash = 1 + beatPulseStrength * midEnergy * 0.35
-      e.bob = -beatPulseStrength * 6 * midEnergy
-    }
+    const bandEnergy = e.band === 'bass' ? bassEnergy : e.band === 'mid' ? midEnergy : highEnergy
+    const groove = Math.sin(e.dancePhase) * 0.08
+    const grooveBob = Math.cos(e.dancePhase) * 8 * bandEnergy
+    const beatLift = beatPulseStrength * (bandEnergy * (e.band === 'bass' ? 14 : 10))
+    const targetSquash = 1 + groove + bandEnergy * 0.2 + squashImpulse
+    const targetBob = -(grooveBob + beatBob + beatLift)
 
-    if (e.band === 'high') {
-      e.phase += dt * 8
-      e.bob = Math.sin(e.phase) * 10 * highEnergy
-    }
+    e.squash = lerp(e.squash || 1, targetSquash, 0.22)
+    e.bob = lerp(e.bob || 0, targetBob, 0.2)
 
     if (e.type === 'floater') {
       e.rage = clamp(
@@ -1400,6 +1757,7 @@ function update(dtRaw) {
       }, 90)
 
       if (started.value && !gameOver.value) {
+        pulseEnemiesOnBeat(1 + songIntensity * 0.6)
         spawnBeatDrivenEntities(false, beatMs)
       }
     }
@@ -1407,6 +1765,7 @@ function update(dtRaw) {
     while (now - lastSubBeatTime >= subBeatMs) {
       lastSubBeatTime += subBeatMs
       if (started.value && !gameOver.value) {
+        pulseEnemiesOnBeat(0.45 + songIntensity * 0.3)
         spawnBeatDrivenEntities(true, beatMs)
       }
     }
@@ -1421,6 +1780,9 @@ function update(dtRaw) {
   const speedFactor = 1 + score.value / 8000
   speed.value = speedFactor
   scrollSpeed = baseScrollSpeed * speedFactor
+  if (!audioStarted && started.value && !gameOver.value && audio && audio.readyState >= 2) {
+    startAudio()
+  }
 
   if (deathSlowTimer > 0) {
     deathSlowTimer = Math.max(0, deathSlowTimer - dtRaw)
@@ -1431,9 +1793,14 @@ function update(dtRaw) {
 
   const effectiveGravity = hangActive ? gravity * 0.035 : gravity
 
-
-  player.vy += (isSlamming ? effectiveGravity * 2.5 : effectiveGravity) * dtRaw * timeScale
-  player.y += player.vy * dtRaw * timeScale
+  const lockSlideOnGround = slideActive && slideElapsed < (SLIDE_CROUCH_DURATION + SLIDE_DASH_DURATION)
+  if (!lockSlideOnGround) {
+    player.vy += (isSlamming ? effectiveGravity * 2.5 : effectiveGravity) * dtRaw * timeScale
+    player.y += player.vy * dtRaw * timeScale
+  } else {
+    player.vy = 0
+    player.y = groundY - player.height
+  }
 
   scrollSpeed = baseScrollSpeed * speed.value * timeScale
 
@@ -1486,7 +1853,30 @@ function update(dtRaw) {
       playerHitbox.y < ey + eh &&
       playerHitbox.y + playerHitbox.h > ey
     ) {
-      if (e.type === 'gomba' && isSlamming && e.alive && !e.squished) {
+      if (e.type === 'spiker' && e.spikes === false && e.alive && !e.squished) {
+        e.squished = true
+        e.alive = false
+        e.squishTimer = 0.18
+        e.currentHeight = e.height
+        addBonus(280)
+        addCharge(10)
+        triggerSquishBounce(1.05)
+
+        sonicBursts.push({
+          x: e.x + e.width / 2,
+          y: e.y + e.height / 2,
+          r: 0,
+          alpha: 0.8,
+        })
+
+        scorePops.push({
+          x: e.x + e.width / 2,
+          y: e.y,
+          value: 280,
+          alpha: 1,
+          vy: -80,
+        })
+      } else if (e.type === 'gomba' && isSlamming && e.alive && !e.squished) {
         // slam kill
         e.squished = true
         e.alive = false
@@ -1494,6 +1884,7 @@ function update(dtRaw) {
         e.currentHeight = e.height
         addBonus(250)
         addCharge(12)
+        triggerSquishBounce()
 
         sonicBursts.push({
           x: e.x + e.width / 2,
@@ -1516,6 +1907,7 @@ function update(dtRaw) {
           e.alive = false
           addBonus(enraged ? 500 : 400)
           addCharge(enraged ? 30 : 20)
+          triggerSquishBounce(1.1)
 
           sonicBursts.push({
             x: e.x + e.width / 2,
@@ -1563,10 +1955,10 @@ function update(dtRaw) {
 
   // Expand shockwaves
   for (const s of shockwaves) {
-    s.r += 1200 * dt
-    s.alpha -= 1.8 * dt
+    s.w = (s.w || 0) + 2000 * dt * (s.intense ? 1.2 : 1)
+    s.alpha -= (s.intense ? 2 : 1.8) * dt
   }
-  shockwaves = shockwaves.filter(s => s.alpha > 0)
+  shockwaves = shockwaves.filter(s => s.alpha > 0 && s.w < width * 2)
 
   // Animate sonic bursts
   for (const s of sonicBursts) {
@@ -1609,21 +2001,61 @@ function update(dtRaw) {
 
   // Ground & slam shockwave
   if (player.y + player.height >= groundY) {
+    const landingSlam = isSlamming
+    const slamDepth = landingSlam ? groundY - (slamOriginY ?? groundY) : 0
+    const intenseSlam = landingSlam && slamDepth > INTENSE_SLAM_HEIGHT
+    const slamPower = intenseSlam ? 1.4 : 1
+
     player.y = groundY - player.height
     player.vy = 0
     player.onGround = true
     airJumps = 1
+    airComboMultiplier = 1
+    airComboStreak = 0
 
-    if (isSlamming) {
+    if (landingSlam) {
       shockwaves.push({
         x: player.x + player.width / 2,
         y: groundY,
-        r: 0,
-        alpha: 0.6,
+        w: 120 * slamPower,
+        h: 18 + (intenseSlam ? 8 : 0),
+        alpha: 0.7,
+        intense: intenseSlam,
       })
+
+      if (intenseSlam) {
+        flashTimer = Math.max(flashTimer, 0.12)
+        cameraShake = Math.max(cameraShake, 12)
+        sonicBursts.push({
+          x: player.x + player.width / 2,
+          y: player.y + player.height / 2,
+          r: 0,
+          alpha: 0.9,
+        })
+
+        const slamCenter = player.x + player.width / 2
+        const knockRange = 240
+        for (const e of enemies) {
+          if (e.type !== 'spiker' || !e.alive || e.squished || e.spikes === false) continue
+          const ex = e.x + e.width / 2
+          if (Math.abs(ex - slamCenter) <= knockRange) {
+            e.spikes = false
+            e.confident = false
+            e.concerned = true
+            hatBursts.push({
+              x: ex,
+              y: e.y,
+              r: 10,
+              alpha: 1,
+              vy: -80,
+            })
+          }
+        }
+      }
     }
 
     isSlamming = false
+    slamOriginY = null
     rotation = 0
   }
 
@@ -1682,8 +2114,10 @@ function update(dtRaw) {
           shockwaves.push({
             x: player.x + player.width / 2,
             y: o.y,
-            r: 0,
+            w: 100,
+            h: 14,
             alpha: 0.7,
+            intense: true,
           })
         } else {
           player.vy = jumpVelocity * 0.9
@@ -1732,6 +2166,11 @@ function update(dtRaw) {
 
   // Clean up dashed obstacles
   obstacles = obstacles.filter(o => !o._destroy)
+
+  if (!prevGameOver && gameOver.value) {
+    canSaveScore.value = true
+    savedCurrentRun.value = false
+  }
 }
 
 function draw() {
@@ -1896,6 +2335,15 @@ function draw() {
     : gameOver.value
     ? '#f97316'
     : basePlayerColor
+  const preppingDash = slideActive && slideElapsed < SLIDE_CROUCH_DURATION
+  const prepT = preppingDash ? clamp(slideElapsed / SLIDE_CROUCH_DURATION, 0, 1) : 0
+  const squishEase = preppingDash ? 1 - Math.pow(1 - prepT, 2) : 0
+  const dashSquish = dashActive ? 0.78 : 1
+  const dashStretch = dashActive ? 1.18 : 1
+  const prepSquishY = preppingDash ? 0.8 + squishEase * 0.08 : 1
+  const prepSquishX = preppingDash ? 1.12 + squishEase * 0.05 : 1
+  const playerSquishY = prepSquishY * dashSquish
+  const playerSquishX = prepSquishX * dashStretch
 
   ctx.save()
   ctx.translate(
@@ -1903,6 +2351,7 @@ function draw() {
     player.y + player.height / 2
   )
   ctx.rotate(rotation)
+  ctx.scale(playerSquishX, playerSquishY)
 
   ctx.fillStyle = playerColor
   ctx.fillRect(
@@ -1913,24 +2362,44 @@ function draw() {
   )
 
   if (gameOver.value && deathByEnemy) {
-    ctx.strokeStyle = '#020617'
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.moveTo(-14, -14)
-    ctx.lineTo(14, 14)
-    ctx.moveTo(14, -14)
-    ctx.lineTo(-14, 14)
-    ctx.stroke()
+    const shardCount = 10
+    for (let i = 0; i < shardCount; i++) {
+      const angle = (Math.PI * 2 * i) / shardCount
+      const len = 26 + Math.random() * 22
+      const thickness = 5 + Math.random() * 3
+      ctx.save()
+      ctx.rotate(angle)
+      ctx.strokeStyle = '#f97316'
+      ctx.lineWidth = thickness
+      ctx.globalAlpha = 0.9
+      ctx.beginPath()
+      ctx.moveTo(0, 0)
+      ctx.lineTo(len, 0)
+      ctx.stroke()
+      ctx.restore()
+    }
+
+    const pulse = ctx.createRadialGradient(0, 0, 0, 0, 0, 38)
+    pulse.addColorStop(0, 'rgba(249, 115, 22, 0.35)')
+    pulse.addColorStop(1, 'rgba(249, 115, 22, 0)')
+    ctx.fillStyle = pulse
+    ctx.fillRect(-40, -40, 80, 80)
   }
   ctx.restore()
 
   // Player glow
   ctx.save()
+  ctx.translate(
+    player.x + player.width / 2,
+    player.y + player.height / 2
+  )
+  ctx.rotate(rotation)
+  ctx.scale(playerSquishX, playerSquishY)
   ctx.shadowColor = playerColor
   ctx.shadowBlur = 18
   ctx.strokeStyle = dashActive ? '#fb7185' : palette.stroke
   ctx.lineWidth = 2
-  ctx.strokeRect(player.x, player.y, player.width, player.height)
+  ctx.strokeRect(-player.width / 2, -player.height / 2, player.width, player.height)
   ctx.restore()
 
   // Invulnerability halo
@@ -1968,11 +2437,18 @@ function draw() {
   for (const s of shockwaves) {
     ctx.save()
     ctx.globalAlpha = s.alpha
-    ctx.strokeStyle = '#22d3ee'
-    ctx.lineWidth = 4
-    ctx.beginPath()
-    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2)
-    ctx.stroke()
+    const halfW = (s.w || 0) / 2
+    const h = s.h || 16
+    const color = s.intense ? '#fbbf24' : palette.beat
+    const grad = ctx.createLinearGradient(s.x - halfW, s.y, s.x + halfW, s.y)
+    grad.addColorStop(0, withAlpha(color, 0))
+    grad.addColorStop(0.5, withAlpha(color, 0.9))
+    grad.addColorStop(1, withAlpha(color, 0))
+    ctx.fillStyle = grad
+    ctx.fillRect(s.x - halfW, s.y - h / 2, s.w || 0, h)
+    ctx.shadowColor = withAlpha(color, 0.4)
+    ctx.shadowBlur = s.intense ? 18 : 10
+    ctx.fillRect(s.x - halfW, s.y - h / 2, s.w || 0, h)
     ctx.restore()
   }
 
@@ -2008,14 +2484,33 @@ function draw() {
   }
 
   // Obstacles
-  ctx.fillStyle = palette.obstacle
   for (const o of obstacles) {
-    ctx.fillRect(o.x, o.y, o.width, o.height)
     ctx.save()
-    ctx.globalAlpha = 0.7
+    const rad = 6
+    ctx.fillStyle = palette.obstacle
+    ctx.beginPath()
+    ctx.moveTo(o.x + rad, o.y)
+    ctx.lineTo(o.x + o.width - rad, o.y)
+    ctx.quadraticCurveTo(o.x + o.width, o.y, o.x + o.width, o.y + rad)
+    ctx.lineTo(o.x + o.width, o.y + o.height - rad)
+    ctx.quadraticCurveTo(o.x + o.width, o.y + o.height, o.x + o.width - rad, o.y + o.height)
+    ctx.lineTo(o.x + rad, o.y + o.height)
+    ctx.quadraticCurveTo(o.x, o.y + o.height, o.x, o.y + o.height - rad)
+    ctx.lineTo(o.x, o.y + rad)
+    ctx.quadraticCurveTo(o.x, o.y, o.x + rad, o.y)
+    ctx.closePath()
+    ctx.fill()
+
+    ctx.globalAlpha = 0.35
     ctx.fillStyle = palette.obstacleGlow
-    ctx.fillRect(o.x, o.y - 6, o.width, 4)
+    ctx.fillRect(o.x, o.y - 4, o.width, 3)
     ctx.restore()
+  }
+
+  const enemyPalettes = {
+    gomba: { body: '#fb923c', accent: '#fdba74', face: '#0b1224', blush: '#fecdd3' },
+    spiker: { body: '#38bdf8', accent: '#a855f7', face: '#0b1224', blush: '#c4b5fd' },
+    floater: { body: '#a5f3fc', accent: '#e0f2fe', face: '#0b1224', blush: '#fecdd3' },
   }
 
   // Enemies
@@ -2024,6 +2519,7 @@ function draw() {
 
     const bobY = e.bob || 0
     const squash = e.squash || 1
+    const enemyColors = enemyPalettes[e.type] || enemyPalettes.gomba
 
     if (e.telegraph && e.telegraph > 0) {
       const t = e.telegraph
@@ -2041,44 +2537,206 @@ function draw() {
       ctx.translate(-e.width / 2, -e.height / 2)
 
       if (e.type === 'gomba') {
-        ctx.fillStyle = '#f97316'
-        ctx.fillRect(0, 0, e.width, e.height)
+        ctx.fillStyle = enemyColors.body
+        ctx.beginPath()
+        ctx.roundRect(0, 4, e.width, e.height - 4, 8)
+        ctx.fill()
 
-        ctx.fillStyle = '#020617'
-        ctx.fillRect(7, 8, 4, 4)
-        ctx.fillRect(e.width - 11, 8, 4, 4)
-        ctx.fillRect(e.width / 2 - 3, 16, 6, 2)
+        // leaf tuft
+        ctx.save()
+        ctx.translate(e.width / 2, 4)
+        ctx.rotate(-0.25)
+        ctx.fillStyle = '#bef264'
+        ctx.beginPath()
+        ctx.moveTo(-2, 0)
+        ctx.quadraticCurveTo(-6, -10, 4, -14)
+        ctx.quadraticCurveTo(10, -4, 0, 2)
+        ctx.closePath()
+        ctx.fill()
+        ctx.restore()
+
+        ctx.fillStyle = enemyColors.accent
+        ctx.beginPath()
+        ctx.roundRect(4, e.height - 12, e.width - 8, 10, 5)
+        ctx.fill()
+
+        const eyeOffset = 7
+        const eyeY = e.height * 0.55
+        const eyeR = 2.6
+        ctx.fillStyle = enemyColors.face
+        ctx.beginPath()
+        ctx.arc(eyeOffset, eyeY - 4, eyeR, 0, Math.PI * 2)
+        ctx.arc(e.width - eyeOffset, eyeY - 4, eyeR, 0, Math.PI * 2)
+        ctx.fill()
+
+        // eye shine
+        ctx.fillStyle = '#fef9c3'
+        ctx.beginPath()
+        ctx.arc(eyeOffset - 1, eyeY - 5, 0.8, 0, Math.PI * 2)
+        ctx.arc(e.width - eyeOffset + 1, eyeY - 5, 0.8, 0, Math.PI * 2)
+        ctx.fill()
+
+        ctx.strokeStyle = enemyColors.face
+        ctx.lineWidth = 1.8
+        ctx.beginPath()
+        ctx.arc(e.width / 2, eyeY + 2, 3, 0, Math.PI)
+        ctx.stroke()
+
+        ctx.globalAlpha = 0.7
+        ctx.fillStyle = enemyColors.blush
+        ctx.beginPath()
+        ctx.arc(eyeOffset - 1, eyeY, 2, 0, Math.PI * 2)
+        ctx.arc(e.width - eyeOffset + 1, eyeY, 2, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.globalAlpha = 1
       }
 
       if (e.type === 'spiker') {
-        ctx.fillStyle = '#38bdf8'
-        ctx.fillRect(0, 0, e.width, e.height)
-
-        ctx.fillStyle = '#020617'
+        const baseH = e.height * 0.75
+        const spikesIntact = e.spikes !== false
+        const concerned = e.concerned || !spikesIntact
+        ctx.fillStyle = enemyColors.body
         ctx.beginPath()
-        ctx.moveTo(4, 0)
-        ctx.lineTo(13, -8)
-        ctx.lineTo(22, 0)
+        ctx.roundRect(0, e.height - baseH, e.width, baseH, 7)
         ctx.fill()
+
+        ctx.fillStyle = enemyColors.accent
+        ctx.beginPath()
+        if (spikesIntact) {
+          ctx.moveTo(2, e.height - baseH + 4)
+          ctx.lineTo(e.width / 2, -6)
+          ctx.lineTo(e.width - 2, e.height - baseH + 4)
+          ctx.closePath()
+          ctx.fill()
+        } else {
+          ctx.roundRect(4, e.height - baseH + 2, e.width - 8, 8, 3)
+          ctx.fill()
+        }
+
+        ctx.fillStyle = enemyColors.face
+        const eyeY = e.height - baseH + 10
+        const eyeR = 2
+        ctx.beginPath()
+        ctx.arc(e.width / 2 - 6, eyeY, eyeR, 0, Math.PI * 2)
+        ctx.arc(e.width / 2 + 6, eyeY, eyeR, 0, Math.PI * 2)
+        ctx.fill()
+
+        // eye gleam + heart sticker
+        ctx.fillStyle = '#fef3c7'
+        ctx.beginPath()
+        ctx.arc(e.width / 2 - 7, eyeY - 1.5, 0.8, 0, Math.PI * 2)
+        ctx.arc(e.width / 2 + 5, eyeY - 1.5, 0.8, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillStyle = '#fb7185'
+        ctx.beginPath()
+        ctx.moveTo(4, e.height - baseH + 8)
+        ctx.bezierCurveTo(2, e.height - baseH + 4, 8, e.height - baseH + 2, 10, e.height - baseH + 8)
+        ctx.bezierCurveTo(8, e.height - baseH + 14, 2, e.height - baseH + 12, 4, e.height - baseH + 8)
+        ctx.fill()
+
+        ctx.strokeStyle = enemyColors.face
+        ctx.lineWidth = 1.6
+        ctx.beginPath()
+        if (concerned) {
+          ctx.moveTo(e.width / 2 - 5, e.height - baseH + 17)
+          ctx.quadraticCurveTo(e.width / 2, e.height - baseH + 22, e.width / 2 + 5, e.height - baseH + 17)
+        } else {
+          ctx.moveTo(e.width / 2 - 4, e.height - baseH + 15)
+          ctx.quadraticCurveTo(e.width / 2, e.height - baseH + (e.confident ? 12 : 16), e.width / 2 + 4, e.height - baseH + 15)
+        }
+        ctx.stroke()
+
+        ctx.globalAlpha = 0.6
+        ctx.fillStyle = enemyColors.blush
+        ctx.fillRect(5, e.height - baseH + 14, 4, 2)
+        ctx.fillRect(e.width - 9, e.height - baseH + 14, 4, 2)
+        ctx.globalAlpha = 1
       }
 
       if (e.type === 'floater') {
         const rage = e.rage ?? 0
-        const r = Math.round(168 + rage * 60)
-        const g = Math.round(85 - rage * 40)
-        const b = Math.round(247 - rage * 80)
-        ctx.fillStyle = `rgb(${r},${Math.max(g, 0)},${Math.max(b, 80)})`
+        const r = Math.round(150 + rage * 40)
+        const g = Math.round(220 - rage * 40)
+        const b = Math.round(245 - rage * 50)
+        ctx.fillStyle = `rgb(${r},${Math.max(g, 150)},${Math.max(b, 140)})`
 
         ctx.beginPath()
         ctx.arc(e.width / 2, e.height / 2, e.width / 2, 0, Math.PI * 2)
         ctx.fill()
 
-        ctx.fillStyle = '#020617'
+        // tiny halo
+        ctx.strokeStyle = withAlpha(enemyColors.accent, 0.9)
+        ctx.lineWidth = 2
         ctx.beginPath()
-        ctx.arc(e.width / 2 - 5, e.height / 2 - 2, 2, 0, Math.PI * 2)
-        ctx.arc(e.width / 2 + 5, e.height / 2 - 2, 2, 0, Math.PI * 2)
+        ctx.arc(e.width / 2, e.height / 2 - 10, e.width / 2.2, 0, Math.PI * 2)
+        ctx.stroke()
+
+        ctx.fillStyle = enemyColors.accent
+        ctx.beginPath()
+        ctx.arc(e.width / 2 - 4, e.height / 2 - 4, e.width / 3.4, 0, Math.PI * 2)
         ctx.fill()
+
+        const eyeY = e.height * 0.52
+        const eyeR = 1.8
+        ctx.fillStyle = enemyColors.face
+        ctx.beginPath()
+        ctx.arc(e.width / 2 - 6, eyeY, eyeR, 0, Math.PI * 2)
+        ctx.arc(e.width / 2 + 6, eyeY, eyeR, 0, Math.PI * 2)
+        ctx.fill()
+
+        // eye sparkle
+        ctx.fillStyle = '#fef3c7'
+        ctx.beginPath()
+        ctx.arc(e.width / 2 - 7, eyeY - 1, 0.7, 0, Math.PI * 2)
+        ctx.arc(e.width / 2 + 5, eyeY - 1, 0.7, 0, Math.PI * 2)
+        ctx.fill()
+
+        ctx.strokeStyle = enemyColors.face
+        ctx.lineWidth = 1.6
+        ctx.beginPath()
+        ctx.arc(e.width / 2, eyeY + 4, 3.2, 0, Math.PI)
+        ctx.stroke()
+
+        ctx.globalAlpha = 0.65
+        ctx.fillStyle = enemyColors.blush
+        ctx.fillRect(e.width / 2 - 10, eyeY + 2, 4, 2.4)
+        ctx.fillRect(e.width / 2 + 6, eyeY + 2, 4, 2.4)
+        ctx.globalAlpha = 1
       }
+    }
+    if (e.squished) {
+      ctx.save()
+      const bodyH = Math.max(e.pancakeHeight ?? e.height * 0.35, e.currentHeight ?? e.height * 0.45)
+      const yOffset = e.height - bodyH
+      ctx.translate(e.x, e.y + yOffset + bobY)
+
+      ctx.fillStyle = enemyColors.body
+      ctx.beginPath()
+      ctx.roundRect(0, 0, e.width, bodyH, 6)
+      ctx.fill()
+
+      ctx.globalAlpha = 0.5
+      ctx.fillStyle = 'rgba(11, 18, 36, 0.2)'
+      ctx.fillRect(2, bodyH - 4, e.width - 4, 3)
+      ctx.globalAlpha = 1
+
+      const shockPulse = 1 + Math.max(0, e.squishTimer) * 3
+      const eyeR = 1.8 * shockPulse
+      const eyeOffset = e.width * 0.28
+      const faceY = bodyH * 0.55
+      ctx.fillStyle = enemyColors.face
+      ctx.beginPath()
+      ctx.arc(eyeOffset, faceY, eyeR, 0, Math.PI * 2)
+      ctx.arc(e.width - eyeOffset, faceY, eyeR, 0, Math.PI * 2)
+      ctx.fill()
+
+      ctx.strokeStyle = enemyColors.face
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.arc(e.width / 2, faceY + 6, 3.5 * shockPulse, 0, Math.PI * 2)
+      ctx.stroke()
+
+      ctx.restore()
     }
     ctx.restore()
 
@@ -2100,6 +2758,15 @@ function draw() {
     ctx.fillStyle = g
     ctx.fillRect(0, 0, width, height)
     ctx.restore()
+  }
+
+  if (flashTimer > 0) {
+    ctx.save()
+    const alpha = clamp(flashTimer / 0.14, 0, 1) * 0.7
+    ctx.fillStyle = `rgba(250, 250, 255, ${alpha})`
+    ctx.fillRect(0, 0, width, height)
+    ctx.restore()
+    flashTimer = Math.max(0, flashTimer - (1 / 60))
   }
 
   ctx.restore() // camera shake
@@ -2184,6 +2851,72 @@ function handleClick() {
   handleJump()
 }
 
+function setDifficulty(level) {
+  difficulty.value = level
+  applyDifficultySettings()
+}
+
+function beginRun() {
+  if (started.value || gameOver.value) return
+  introCollapsing.value = true
+  setTimeout(() => {
+    started.value = true
+  }, 320)
+}
+
+function startSlide() {
+  if (slideActive || gameOver.value) return
+  slideActive = true
+  slideTimer = SLIDE_DURATION
+  slideElapsed = 0
+  slideStartX = player.x
+  slideTargetX = player.x + SLIDE_DISTANCE
+  slideJumped = false
+  player.vy = 0
+  isSlamming = false
+  slamOriginY = null
+  player.onGround = true
+  applySlideStrike()
+  flashTimer = 0.14
+}
+
+function saveHighScore() {
+  if (!canSaveScore.value || savedCurrentRun.value) return
+  const name = playerName.value.trim() || 'Player'
+  const entry = {
+    id: Date.now(),
+    name: name.slice(0, 16),
+    score: Math.floor(score.value),
+    date: new Date().toISOString().slice(0, 10),
+  }
+  const sorted = [...highScores.value, entry].sort((a, b) => b.score - a.score)
+  const insertIdx = sorted.findIndex(e => e.id === entry.id)
+
+  const placeholder = { ...entry, id: `placeholder-${entry.id}`, placeholder: true }
+  const withPlaceholder = [...sorted]
+  withPlaceholder.splice(insertIdx, 1, placeholder)
+  const slicedPlaceholder = withPlaceholder.slice(0, 10)
+  placeholderIndex.value = Math.min(insertIdx, slicedPlaceholder.length - 1)
+  highScores.value = slicedPlaceholder
+  savingHighScore.value = true
+  savedCurrentRun.value = false
+
+  setTimeout(() => {
+    const finalList = sorted.slice(0, 10)
+    highScores.value = finalList
+    lastSavedIndex.value = finalList.findIndex(e => e.id === entry.id)
+    persistHighScores()
+    savingHighScore.value = false
+    placeholderIndex.value = null
+    savedCurrentRun.value = true
+  }, 420)
+
+  localStorage.setItem('hoppy-name', entry.name)
+  playerName.value = entry.name
+  savedCurrentRun.value = true
+  canSaveScore.value = false
+}
+
 onMounted(() => {
   const c = canvas.value
   if (!c) return
@@ -2195,10 +2928,38 @@ onMounted(() => {
   c.height = height
   ctx = c.getContext('2d')
 
+  // Rolling replay recorder
+  if (c.captureStream && typeof MediaRecorder !== 'undefined') {
+    try {
+      const stream = c.captureStream(60)
+      replayRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' })
+    } catch (_) {
+      try {
+        const stream = c.captureStream(60)
+        replayRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' })
+      } catch (err) {
+        console.warn('replay recorder unavailable', err)
+      }
+    }
+
+    if (replayRecorder) {
+      replayRecorder.ondataavailable = e => {
+        if (!e.data || e.data.size === 0) return
+        const entry = { data: e.data, t: performance.now(), type: e.data.type }
+        replayBuffer.push(entry)
+        // keep last ~6 seconds
+        const cutoff = performance.now() - 6000
+        replayBuffer = replayBuffer.filter(chunk => chunk.t >= cutoff)
+      }
+      replayRecorder.start(500)
+    }
+  }
+
   resetGame()
   loadDefaultAudio()
   startObstacleSpawner()
   animationId = requestAnimationFrame(loop)
+  loadHighScores()
 
   window.addEventListener('keydown', handleKeydown)
   window.addEventListener('keyup', handleKeyup)
@@ -2213,6 +2974,12 @@ onUnmounted(() => {
   if (animationId) cancelAnimationFrame(animationId)
   if (beatIntervalId) clearInterval(beatIntervalId)
   if (obstacleSpawnIntervalId) clearInterval(obstacleSpawnIntervalId)
+  if (replayStopTimeout) clearTimeout(replayStopTimeout)
+  try {
+    if (replayRecorder && replayRecorder.state === 'recording') {
+      replayRecorder.stop()
+    }
+  } catch (_) {}
   window.removeEventListener('keydown', handleKeydown)
   window.removeEventListener('keyup', handleKeyup)
   const c = canvas.value
@@ -2290,6 +3057,42 @@ onUnmounted(() => {
   align-items: baseline;
 }
 
+.hud-difficulty {
+  border-radius: 0.9rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.difficulty-toggle {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.difficulty-button {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #e2e8f0;
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.18s ease;
+}
+
+.difficulty-button:hover {
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+
+.difficulty-button--active {
+  border-color: #38bdf8;
+  color: #0f172a;
+  background: linear-gradient(120deg, #38bdf8, #a855f7);
+  box-shadow: 0 6px 18px rgba(56, 189, 248, 0.3);
+}
+
 .hud-item .label {
   font-size: 0.7rem;
   text-transform: uppercase;
@@ -2347,6 +3150,16 @@ onUnmounted(() => {
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
 }
 
+.overlay-card--collapse {
+  animation: collapse-beat 0.32s ease-in forwards;
+}
+
+@keyframes collapse-beat {
+  0% { transform: scale(1) translateY(0); opacity: 1; }
+  50% { transform: scale(1.05) translateY(-6px); opacity: 0.8; }
+  100% { transform: scale(0.15) translateY(-40px); opacity: 0; }
+}
+
 .overlay-card h2 {
   font-size: 1.3rem;
   margin-bottom: 0.4rem;
@@ -2362,6 +3175,87 @@ onUnmounted(() => {
   opacity: 0.8;
 }
 
+.replay-toast {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(14, 165, 233, 0.9);
+  border: 1px solid rgba(125, 211, 252, 0.8);
+  color: #0b1224;
+  padding: 0.65rem 1.1rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 24px rgba(59, 130, 246, 0.35);
+  text-align: center;
+  animation: toast-pop 0.14s ease-out;
+  pointer-events: none;
+}
+
+.replay-title {
+  font-weight: 800;
+  font-size: 0.95rem;
+  letter-spacing: 0.03em;
+}
+
+.replay-sub {
+  font-size: 0.8rem;
+}
+
+.replay-pip {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  width: 200px;
+  height: 112px;
+  border: 2px solid rgba(125, 211, 252, 0.8);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.4);
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.replay-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@keyframes toast-pop {
+  from { transform: translate(-50%, -10px) scale(0.98); opacity: 0; }
+  to { transform: translate(-50%, 0) scale(1); opacity: 1; }
+}
+
+.score-save {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.6rem 0;
+  justify-content: center;
+}
+
+.name-input {
+  background: #0b1224;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  color: #e5e7eb;
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.5rem;
+  min-width: 140px;
+}
+
+.save-button {
+  background: linear-gradient(90deg, #22c55e, #38bdf8);
+  color: #0b1224;
+  border: none;
+  padding: 0.4rem 0.8rem;
+  border-radius: 0.5rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(56, 189, 248, 0.35);
+}
+
+.save-button:hover {
+  filter: brightness(1.05);
+}
+
 kbd {
   background: #111827;
   border-radius: 4px;
@@ -2371,9 +3265,28 @@ kbd {
 }
 
 .controls {
-  font-size: 0.8rem;
-  opacity: 0.8;
+  font-size: 0.85rem;
+  opacity: 0.9;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.controls-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.controls-label {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+  opacity: 0.8;
 }
 
 .keybinds-panel {
@@ -2492,5 +3405,91 @@ kbd {
   text-align: right;
   font-size: 0.85rem;
   color: #e5e7eb;
+}
+
+.scoreboard-panel {
+  margin-top: 1rem;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 0.9rem;
+  padding: 1rem;
+}
+
+.scoreboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.score-slide-enter-active,
+.score-slide-leave-active {
+  transition: all 0.28s ease;
+}
+.score-slide-enter-from {
+  opacity: 0;
+  transform: translateY(14px);
+}
+.score-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-14px);
+}
+
+.score-row {
+  display: grid;
+  grid-template-columns: 50px 1fr 100px 100px;
+  gap: 0.5rem;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.6rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.score-row--placeholder {
+  border-style: dashed;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.score-row--new {
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35), 0 10px 24px rgba(56, 189, 248, 0.2);
+  animation: pulse-new 0.6s ease-in-out 1;
+}
+
+.score-row--new .score-value {
+  color: #38bdf8;
+}
+
+@keyframes pulse-new {
+  0% { transform: translateY(-6px) scale(1.02); opacity: 0; }
+  40% { transform: translateY(0) scale(1.01); opacity: 1; }
+  100% { transform: translateY(0) scale(1); }
+}
+
+.score-rank {
+  font-weight: 700;
+  color: #38bdf8;
+}
+
+.score-name {
+  font-weight: 600;
+}
+
+.score-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #facc15;
+  font-weight: 700;
+}
+
+.score-date {
+  text-align: right;
+  opacity: 0.75;
+  font-size: 0.85rem;
+}
+
+.score-empty {
+  opacity: 0.7;
+  margin: 0.2rem 0 0;
 }
 </style>

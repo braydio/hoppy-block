@@ -2,8 +2,11 @@
 <template>
   <div class="app-root">
     <header class="app-header">
-      <h1>Hoppy Block</h1>
-      <p></p>
+      <div class="title-wrap">
+        <h1>HOPPY BLOCK</h1>
+        <span class="title-glow"></span>
+      </div>
+      <p class="byline">by brayden</p>
     </header>
 
     <main class="app-main">
@@ -31,16 +34,43 @@ import HoppyBlockGame from './components/HoppyBlockGame.vue'
   padding: 1.5rem 1rem 0.5rem;
 }
 
-.app-header h1 {
-  font-size: 2rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.title-wrap {
+  position: relative;
+  display: inline-block;
+  padding: 0.35rem 1.2rem;
+  border-radius: 0.9rem;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(56, 189, 248, 0.14));
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  box-shadow: 0 8px 28px rgba(34, 211, 238, 0.25);
 }
 
-.app-header p {
-  opacity: 0.8;
-  margin-top: 0.25rem;
-  font-size: 0.9rem;
+.title-wrap h1 {
+  font-size: 2.4rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin: 0;
+  color: #e2f3ff;
+  text-shadow: 0 0 12px rgba(34, 211, 238, 0.8), 0 0 24px rgba(56, 189, 248, 0.6);
+  font-family: 'Audiowide', 'Orbitron', 'Michroma', system-ui, sans-serif;
+}
+
+.title-glow {
+  position: absolute;
+  inset: -6px;
+  border-radius: 1.1rem;
+  background: radial-gradient(circle at 20% 20%, rgba(34, 197, 94, 0.4), transparent 40%),
+              radial-gradient(circle at 80% 80%, rgba(56, 189, 248, 0.35), transparent 45%);
+  filter: blur(12px);
+  z-index: -1;
+}
+
+.byline {
+  opacity: 0.75;
+  margin-top: 0.35rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  font-style: italic;
 }
 
 .app-main {
