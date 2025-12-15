@@ -65,6 +65,7 @@ export interface GameRuntime {
   scorePops: any[]
   sonicBursts: any[]
   hatBursts: any[]
+  spawnBeacons: { x: number; y: number; alpha: number; band: 'bass' | 'mid' | 'high' }[]
   playerFragments: any[]
   dashActive: boolean
   dashTimer: number
@@ -103,6 +104,7 @@ export interface GameRuntime {
   player: Player
   cameraShake: number
   requestReplayCapture?: boolean
+  comboGraceTimer?: number
 }
 
 export interface HighScoreEntry {
@@ -179,11 +181,12 @@ export function createGameState(): GameState {
     jumpApexY: 0,
     obstacles: [],
     enemies: [],
-    shockwaves: [],
-    scorePops: [],
-    sonicBursts: [],
-    hatBursts: [],
-    playerFragments: [],
+  shockwaves: [],
+  scorePops: [],
+  sonicBursts: [],
+  hatBursts: [],
+    spawnBeacons: [],
+  playerFragments: [],
     dashActive: false,
     dashTimer: 0,
     dashVelocity: 0,
@@ -228,6 +231,7 @@ export function createGameState(): GameState {
     },
     cameraShake: 0,
     requestReplayCapture: false,
+    comboGraceTimer: 0,
   }
 
   const editingKey = ref<string | null>(null)

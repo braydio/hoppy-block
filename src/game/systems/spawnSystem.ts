@@ -20,6 +20,29 @@ export function applyDifficultySettings(runtime: GameRuntime, ui: UiState) {
 }
 
 export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
+  const patternCounts: Record<string, number> = {}
+  let patternTotal = 0
+
+  function trackPattern(energy: AudioEnergy) {
+    const bands = [energy.bass, energy.mids, energy.highs]
+    const dominantIdx = bands.indexOf(Math.max(...bands))
+    const dominant = dominantIdx === 0 ? 'b' : dominantIdx === 1 ? 'm' : 'h'
+    const encode = (v: number) => (v > 0.55 ? 'H' : v > 0.32 ? 'M' : 'L')
+    const signature = `${dominant}-${encode(energy.bass)}${encode(energy.mids)}${encode(energy.highs)}`
+    patternCounts[signature] = (patternCounts[signature] || 0) + 1
+    patternTotal += 1
+
+    const top = Object.entries(patternCounts)
+      .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
+      .slice(0, 3)
+    const topSignatures = top.map(t => t[0])
+    const share = Math.min(1, (patternCounts[signature] || 0) / Math.max(1, patternTotal))
+    const isTop = topSignatures.includes(signature)
+    const bias = isTop ? 1.15 + share * 0.6 : 0.85
+
+    return { signature, bias: Math.min(1.8, Math.max(0.75, bias)) }
+  }
+
   function spawnEnemy(type: Enemy['type']) {
     let enemy: Enemy | null = null
     if (type === 'gomba') {
@@ -74,17 +97,26 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
       }
     }
 
-    if (enemy) runtime.enemies.push(enemy)
+    if (enemy) {
+      runtime.enemies.push(enemy)
+      runtime.spawnBeacons.push({
+        x: enemy.x + enemy.width / 2,
+        y: enemy.y + enemy.height + 8,
+        alpha: 1,
+        band: enemy.band,
+      })
+    }
     return enemy
   }
 
-  function spawnObstacle() {
-    const minGap = 280
+  function spawnObstacle(options?: { nearStart?: boolean }) {
+    const minGap = 200
     const widthOptions = [30, 40, 50]
     const chosenWidth = widthOptions[Math.floor(Math.random() * widthOptions.length)] ?? 40
 
+    const offset = options?.nearStart ? Math.random() * 30 : Math.random() * 70
     const obstacle = {
-      x: runtime.width + Math.random() * 50,
+      x: runtime.width + offset,
       y: runtime.groundY - 40,
       width: chosenWidth,
       height: 40,
@@ -157,6 +189,7 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
   }
 
   function spawnBeatDrivenEntities(isSubBeat: boolean, energy: AudioEnergy) {
+    const pattern = trackPattern(energy)
     const diff = getDifficultySettings(ui)
     const uniformity = diff.uniformity ?? 0.5
     const beatsSinceEnemy = runtime.beatIndex - runtime.lastEnemySpawnBeat
@@ -165,15 +198,21 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
     const intensity = Math.max(0, Math.min(1, energy.intensity))
     const spawnNoise = (Math.random() - 0.5) * (1 - uniformity) * 0.35
     const spawnChance = ((isSubBeat
-      ? 0.1 + intensity * 0.25
-      : 0.2 + intensity * 0.35) + spawnNoise) * diff.spawnRate
+      ? 0.18 + intensity * 0.36
+      : 0.34 + intensity * 0.45) + spawnNoise) * diff.spawnRate * pattern.bias
 
     const formationChance = !isSubBeat && intensity > 0.35
-      ? (0.15 - uniformity * 0.08) * diff.spawnRate
+      ? (0.22 - uniformity * 0.06) * diff.spawnRate * (0.95 + pattern.bias * 0.3)
       : 0
 
-    const minBeatGapBase = isSubBeat ? 0.5 : 1
-    const minBeatGap = minBeatGapBase + uniformity * 0.25 - (1 - uniformity) * 0.1
+    const minBeatGapBase = isSubBeat ? 0.3 : 0.7
+    const minBeatGap = minBeatGapBase + uniformity * 0.18 - (1 - uniformity) * 0.06
+
+    const beaconBand = energy.highs > energy.bass && energy.highs > energy.mids
+      ? 'high'
+      : energy.mids > energy.bass
+        ? 'mid'
+        : 'bass'
 
     if (!isSubBeat && Math.random() < formationChance && beatsSinceEnemy >= minBeatGap + 0.4) {
       const form = intensity > 0.6 ? 'stagger' : 'triple-line'
@@ -187,13 +226,19 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
         } else {
           spawnEnemy(type)
         }
+        runtime.spawnBeacons.push({
+          x: runtime.width + 60,
+          y: runtime.groundY - 24,
+          alpha: 0.8,
+          band: beaconBand,
+        })
         runtime.lastEnemySpawnBeat = runtime.beatIndex + (isSubBeat ? 0.5 : 0)
       }
     }
 
     const obstacleNoise = (Math.random() - 0.5) * (1 - uniformity) * 0.25
-    const obstacleChance = (0.12 + intensity * 0.28 + energy.highs * 0.18 + obstacleNoise) * diff.spawnRate
-    const minObstacleGap = 1 + uniformity * 0.25
+    const obstacleChance = (0.2 + intensity * 0.36 + energy.highs * 0.22 + obstacleNoise) * diff.spawnRate
+    const minObstacleGap = 0.65 + uniformity * 0.22
     if (!isSubBeat && beatsSinceObstacle >= minObstacleGap && Math.random() < obstacleChance) {
       spawnObstacle()
       runtime.lastObstacleSpawnBeat = runtime.beatIndex

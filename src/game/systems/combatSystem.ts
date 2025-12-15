@@ -1,8 +1,9 @@
 import { AIR_COMBO_MAX, AIR_COMBO_STEP, DASH_RANGE, SLIDE_DISTANCE } from '../core/constants'
 import { clamp } from './physicsSystem'
 import type { GameRuntime, UiState } from '../core/gameState'
+import type { SfxName } from './audioEngine'
 
-export function triggerSquishBounce(runtime: GameRuntime, intensity = 1) {
+export function triggerSquishBounce(runtime: GameRuntime, intensity = 1, playSfx?: (name: SfxName, loudness?: number) => void) {
   const airborneBefore = !runtime.player.onGround
   const bounceScale = Math.max(0.6, intensity)
   runtime.player.vy = runtime.jumpVelocity * 0.7 * bounceScale
@@ -17,6 +18,7 @@ export function triggerSquishBounce(runtime: GameRuntime, intensity = 1) {
     )
     runtime.airComboStreak += 1
     if (runtime.airComboStreak >= 3) {
+      playSfx?.('combo', 0.9)
       runtime.requestReplayCapture = true
       runtime.airComboStreak = 0
     }
@@ -29,7 +31,8 @@ export function triggerSquishBounce(runtime: GameRuntime, intensity = 1) {
 export function applyBlastStrikes(
   runtime: GameRuntime,
   addBonus: (points: number) => void,
-  addCharge: (amount: number) => void
+  addCharge: (amount: number) => void,
+  playSfx?: (name: SfxName, loudness?: number) => void
 ) {
   const hitLeft = runtime.player.x
   const hitRight = runtime.player.x + runtime.player.width + DASH_RANGE
@@ -107,10 +110,15 @@ export function applyBlastStrikes(
       h: 12,
       alpha: 0.5,
     })
+    playSfx?.('blast', 0.8)
   }
 }
 
-export function applySlideStrike(runtime: GameRuntime, addBonus: (points: number) => void) {
+export function applySlideStrike(
+  runtime: GameRuntime,
+  addBonus: (points: number) => void,
+  playSfx?: (name: SfxName, loudness?: number) => void
+) {
   const slideLeft = Math.min(runtime.slideStartX, runtime.slideStartX + SLIDE_DISTANCE)
   const slideRight = Math.max(runtime.slideStartX, runtime.slideStartX + SLIDE_DISTANCE)
   const hitTop = runtime.groundY - 48
@@ -126,6 +134,7 @@ export function applySlideStrike(runtime: GameRuntime, addBonus: (points: number
       e.squishTimer = 0.14
       e.currentHeight = e.height
       addBonus(220)
+      playSfx?.('enemyPop', 0.7)
       runtime.sonicBursts.push({
         x: e.x + e.width / 2,
         y: e.y + e.height / 2,

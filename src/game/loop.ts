@@ -79,7 +79,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.groundY = runtime.height - 60
     runtime.gravity = 2600
     runtime.jumpVelocity = -1050
-    runtime.baseScrollSpeed = 380
+    runtime.baseScrollSpeed = 440
     runtime.scrollSpeed = runtime.baseScrollSpeed
     applyDifficultySettings(runtime, ui)
     runtime.lastTimestamp = null
@@ -147,8 +147,15 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.hangActive = false
     runtime.slowActive = false
     runtime.hatBursts = []
+    runtime.spawnBeacons = []
     runtime.requestReplayCapture = false
     runtime.cameraShake = 0
+    runtime.lastEnemySpawnBeat = -1
+    runtime.lastObstacleSpawnBeat = -1
+    runtime.comboGraceTimer = 0
+    // Give players something to react to immediately.
+    spawns.spawnObstacle({ nearStart: true })
+    spawns.spawnEnemy('gomba')
   }
 
   async function startAudio() {
@@ -162,9 +169,9 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     if (runtime.obstacleSpawnIntervalId) clearInterval(runtime.obstacleSpawnIntervalId)
     runtime.obstacleSpawnIntervalId = window.setInterval(() => {
       if (!ui.started.value || ui.gameOver.value) return
-      const hasNearRight = runtime.obstacles.some(o => runtime.width - o.x < 260)
+      const hasNearRight = runtime.obstacles.some(o => runtime.width - o.x < 220)
       if (!hasNearRight) spawns.spawnObstacle()
-    }, 1600)
+    }, 1200)
   }
 
   async function handleAudioUpload(e: Event) {
@@ -276,6 +283,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.phaseModeIndex = (runtime.phaseModeIndex + 1) % PHASE_STATES.length
 
     audioEngine.setSlapMix(0.9)
+    audioEngine.playSfx('phase', 0.9)
 
     runtime.sonicBursts.push({
       x: runtime.player.x + runtime.player.width / 2,
@@ -307,6 +315,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       runtime.dashVelocity = DASH_THRUST
       runtime.isSlamming = false
       registerBeatAction(runtime, true)
+      audioEngine.playSfx('blast', 0.85)
 
       runtime.sonicBursts.push({
         x: runtime.player.x + runtime.player.width / 2,
@@ -362,11 +371,11 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
   }
 
   function applyBlast() {
-    applyBlastStrikes(runtime, addBonus, addCharge)
+    applyBlastStrikes(runtime, addBonus, addCharge, audioEngine.playSfx)
   }
 
   function applySlide() {
-    applySlideStrike(runtime, addBonus)
+    applySlideStrike(runtime, addBonus, audioEngine.playSfx)
   }
 
   function beginRun() {
@@ -505,6 +514,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     if (runtime.invulnTimer > 0) {
       runtime.invulnTimer = Math.max(0, runtime.invulnTimer - dtRaw)
     }
+    runtime.comboGraceTimer = Math.max(0, (runtime.comboGraceTimer || 0) - dtRaw)
 
     runtime.hangActive = runtime.hangActive && ui.charge.value > 0
     runtime.slowActive = runtime.slowActive && ui.charge.value > 0
@@ -533,7 +543,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.cameraShake = lerp(
       runtime.cameraShake,
       ui.started.value && !ui.gameOver.value
-        ? (ui.beatPulse.value ? audioEngine.bass * 5 : 0) + intensity * 1.4
+        ? (ui.beatPulse.value ? audioEngine.bass * 2 : 0) + intensity * 0.6
         : 0,
       0.16
     )
@@ -722,7 +732,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
           e.currentHeight = e.height
           addBonus(280)
           addCharge(10)
-          triggerSquishBounce(runtime, 1.05)
+          audioEngine.playSfx('enemyPop', 0.7)
+          triggerSquishBounce(runtime, 1.05, audioEngine.playSfx)
 
           runtime.sonicBursts.push({
             x: e.x + e.width / 2,
@@ -745,7 +756,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
           e.currentHeight = e.height
           addBonus(250)
           addCharge(12)
-          triggerSquishBounce(runtime)
+          audioEngine.playSfx('enemyPop', 0.7)
+          triggerSquishBounce(runtime, 1, audioEngine.playSfx)
 
           runtime.sonicBursts.push({
             x: e.x + e.width / 2,
@@ -767,7 +779,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
             e.alive = false
             addBonus(enraged ? 500 : 400)
             addCharge(enraged ? 30 : 20)
-            triggerSquishBounce(runtime, 1.1)
+            audioEngine.playSfx('enemyPop', enraged ? 1 : 0.8)
+            triggerSquishBounce(runtime, 1.1, audioEngine.playSfx)
 
             runtime.sonicBursts.push({
               x: e.x + e.width / 2,
@@ -824,6 +837,10 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     }
     runtime.sonicBursts = runtime.sonicBursts.filter(s => s.alpha > 0)
 
+    runtime.spawnBeacons = runtime.spawnBeacons
+      .map(b => ({ ...b, alpha: b.alpha - dt * 1.4 }))
+      .filter(b => b.alpha > 0)
+
     for (const p of runtime.scorePops) {
       p.y += p.vy * dt
       p.alpha -= 1.4 * dt
@@ -839,8 +856,14 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.playerFragments = runtime.playerFragments.filter(f => f.alpha > 0)
 
     if (runtime.requestReplayCapture) {
-      captureInstantReplay(runtime, ui)
-      runtime.requestReplayCapture = false
+      try {
+        captureInstantReplay(runtime, ui)
+      } catch (err) {
+        console.warn('replay capture failed', err)
+        ui.snapshotMessageTimer.value = 0
+      } finally {
+        runtime.requestReplayCapture = false
+      }
     }
 
     if (!runtime.player.onGround) {
@@ -863,18 +886,21 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       runtime.player.vy = 0
       runtime.player.onGround = true
       runtime.airJumps = 1
-      runtime.airComboMultiplier = 1
-      runtime.airComboStreak = 0
+      if (!(runtime.comboGraceTimer && runtime.comboGraceTimer > 0)) {
+        runtime.airComboMultiplier = 1
+        runtime.airComboStreak = 0
+      }
 
       if (landingSlam) {
         runtime.shockwaves.push({
           x: runtime.player.x + runtime.player.width / 2,
           y: runtime.groundY,
-          w: 120 * slamPower,
-          h: 18 + (intenseSlam ? 8 : 0),
-          alpha: 0.7,
+          w: 90 * slamPower,
+          h: 12 + (intenseSlam ? 6 : 0),
+          alpha: 0.5,
           intense: intenseSlam,
         })
+        audioEngine.playSfx('slam', intenseSlam ? 1 : 0.8)
 
         if (intenseSlam) {
           runtime.flashTimer = Math.max(runtime.flashTimer, 0.12)
@@ -967,6 +993,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
               alpha: 0.7,
               intense: true,
             })
+            runtime.comboGraceTimer = 0.8
           } else {
             runtime.player.vy = runtime.jumpVelocity * 0.9
           }
@@ -1012,6 +1039,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.obstacles = runtime.obstacles.filter(o => !o._destroy)
 
     if (!prevGameOver && ui.gameOver.value) {
+      audioEngine.playSfx('death', 1)
       ui.canSaveScore.value = true
       ui.savedCurrentRun.value = false
     }
@@ -1097,10 +1125,12 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     }
     if (matchesKey('antigrav', e.code, keybinds)) {
       e.preventDefault()
+      if (!runtime.hangActive) audioEngine.playSfx('antigravOn', 0.7)
       runtime.hangActive = true
     }
     if (matchesKey('slowmo', e.code, keybinds)) {
       e.preventDefault()
+      if (!runtime.slowActive) audioEngine.playSfx('slowmoOn', 0.7)
       runtime.slowActive = true
     }
   }

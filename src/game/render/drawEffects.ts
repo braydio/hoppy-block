@@ -1,6 +1,7 @@
 import type { GameRuntime, UiState } from '../core/gameState'
 import { withAlpha } from './colors'
 import type { Palette } from './types'
+import { DEFAULT_PALETTE } from '../core/constants'
 
 export function drawHatBursts(ctx: CanvasRenderingContext2D, runtime: GameRuntime, palette: Palette) {
   for (const p of runtime.hatBursts) {
@@ -83,13 +84,13 @@ export function drawAudioVisualizer(
 
   for (let i = 0; i < barCount; i++) {
     const v = (freq[i] ?? 0) / 255
-    const barHeight = v * 140
+    const barHeight = v * 110
 
-    ctx.fillStyle = withAlpha(palette.visBar, v)
+    ctx.fillStyle = withAlpha(palette.visBar, v * 0.6)
     ctx.fillRect(
       i * barWidth,
-      runtime.groundY - barHeight,
-      barWidth - 2,
+      runtime.groundY - barHeight + 6,
+      barWidth - 3,
       barHeight
     )
   }
@@ -114,23 +115,46 @@ export function drawAudioVisualizer(
 
   ctx.stroke()
   ctx.restore()
+
+  for (const b of runtime.spawnBeacons || []) {
+    ctx.save()
+    ctx.globalAlpha = b.alpha
+    const hue = b.band === 'bass' ? '#22d3ee' : b.band === 'mid' ? '#a855f7' : '#fbbf24'
+    ctx.strokeStyle = withAlpha(hue, 0.9)
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(b.x, b.y, 18, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(b.x, b.y, 28, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.lineWidth = 1
+    ctx.strokeStyle = withAlpha(hue, 0.5)
+    ctx.beginPath()
+    ctx.moveTo(b.x - 16, b.y)
+    ctx.lineTo(b.x + 16, b.y)
+    ctx.moveTo(b.x, b.y - 16)
+    ctx.lineTo(b.x, b.y + 16)
+    ctx.stroke()
+    ctx.restore()
+  }
 }
 
 export function drawShockwaves(ctx: CanvasRenderingContext2D, runtime: GameRuntime, palette: Palette) {
   for (const s of runtime.shockwaves) {
     ctx.save()
-    ctx.globalAlpha = s.alpha
+    ctx.globalAlpha = s.alpha * 0.9
     const halfW = (s.w || 0) / 2
-    const h = s.h || 16
-    const color = s.intense ? '#fbbf24' : palette.beat
+    const h = s.h || 12
+    const color = s.intense ? '#fcd34d' : palette.beat
     const grad = ctx.createLinearGradient(s.x - halfW, s.y, s.x + halfW, s.y)
     grad.addColorStop(0, withAlpha(color, 0))
-    grad.addColorStop(0.5, withAlpha(color, 0.9))
+    grad.addColorStop(0.5, withAlpha(color, 0.65))
     grad.addColorStop(1, withAlpha(color, 0))
     ctx.fillStyle = grad
     ctx.fillRect(s.x - halfW, s.y - h / 2, s.w || 0, h)
-    ctx.shadowColor = withAlpha(color, 0.4)
-    ctx.shadowBlur = s.intense ? 18 : 10
+    ctx.shadowColor = withAlpha(color, 0.25)
+    ctx.shadowBlur = s.intense ? 12 : 6
     ctx.fillRect(s.x - halfW, s.y - h / 2, s.w || 0, h)
     ctx.restore()
   }
@@ -200,6 +224,13 @@ export function drawPhaseOverlay(ctx: CanvasRenderingContext2D, runtime: GameRun
     ctx.globalAlpha = 0.15
     ctx.fillStyle = withAlpha(palette.beat, 0.4)
     ctx.fillRect(0, 0, runtime.width, runtime.height)
+    if (runtime.phaseTimer < 2) {
+      const pct = Math.min(1, Math.max(0, (2 - runtime.phaseTimer) / 2))
+      const blink = (Math.sin(performance.now() * 0.018) + 1) * 0.5
+      ctx.globalAlpha = 0.08 + 0.22 * blink * pct
+      ctx.fillStyle = withAlpha(DEFAULT_PALETTE.beat, 0.45)
+      ctx.fillRect(0, 0, runtime.width, runtime.height)
+    }
     ctx.restore()
   }
 

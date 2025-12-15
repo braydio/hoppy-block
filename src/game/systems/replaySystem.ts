@@ -46,18 +46,22 @@ export function captureInstantReplay(runtime: GameRuntime, ui: UiState) {
   const recent = runtime.replayBuffer.filter(c => c.t >= startTime)
   if (!recent.length) return
 
-  const first = recent[0]!
-  const blob = new Blob(recent.map(r => r.data), { type: first.type || 'video/webm' })
-  if (ui.replayVideoUrl.value) URL.revokeObjectURL(ui.replayVideoUrl.value)
-  ui.replayVideoUrl.value = URL.createObjectURL(blob)
-  ui.replayPlaybackKey.value += 1
-  ui.replayVisible.value = true
+  try {
+    const first = recent[0]!
+    const blob = new Blob(recent.map(r => r.data), { type: first.type || 'video/webm' })
+    if (ui.replayVideoUrl.value) URL.revokeObjectURL(ui.replayVideoUrl.value)
+    ui.replayVideoUrl.value = URL.createObjectURL(blob)
+    ui.replayPlaybackKey.value += 1
+    ui.replayVisible.value = true
 
-  setTimeout(() => {
-    ui.replayVisible.value = false
-    if (ui.replayVideoUrl.value) {
-      URL.revokeObjectURL(ui.replayVideoUrl.value)
-      ui.replayVideoUrl.value = null
-    }
-  }, 6000)
+    setTimeout(() => {
+      ui.replayVisible.value = false
+      if (ui.replayVideoUrl.value) {
+        URL.revokeObjectURL(ui.replayVideoUrl.value)
+        ui.replayVideoUrl.value = null
+      }
+    }, 6000)
+  } catch (err) {
+    console.warn('replay assembly failed', err)
+  }
 }
