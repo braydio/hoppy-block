@@ -14,10 +14,6 @@
         <span class="value">{{ ui.speed.value.toFixed(1) }}x</span>
       </div>
       <div class="hud-item">
-        <span class="label">Hoppy Block</span>
-        <span class="value">{{ ui.bpm.value }} BPM</span>
-      </div>
-      <div class="hud-item hud-difficulty">
         <span class="label">Difficulty</span>
         <div class="difficulty-toggle">
           <button

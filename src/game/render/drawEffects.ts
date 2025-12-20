@@ -79,14 +79,36 @@ export function drawAudioVisualizer(
   ;(analyser as any).getByteFrequencyData(freq)
   ;(analyser as any).getByteTimeDomainData(time)
 
+  let sumSq = 0
+  for (let i = 0; i < time.length; i++) {
+    const sample = (time[i] ?? 128) - 128
+    sumSq += sample * sample
+  }
+  const rms = Math.sqrt(sumSq / Math.max(1, time.length)) / 128
+  const lastRms = (drawAudioVisualizer as any)._lastRms ?? rms
+  const rmsDelta = rms - lastRms
+  ;(drawAudioVisualizer as any)._lastRms = rms
+
   const barCount = 32
   const barWidth = runtime.width / barCount
+  const surgeAlpha = Math.min(0.25, Math.max(0, rmsDelta) * 2.5)
+  const dropAlpha = Math.min(0.18, Math.max(0, -rmsDelta) * 2)
+
+  // Background wash that reacts to RMS surges/drops for more dynamic visuals
+  ctx.save()
+  ctx.globalAlpha = surgeAlpha + dropAlpha
+  const g = ctx.createRadialGradient(runtime.width * 0.7, runtime.groundY, 80, runtime.width * 0.3, runtime.height * 0.2, 420)
+  g.addColorStop(0, withAlpha(palette.visWave, 0.28 + surgeAlpha))
+  g.addColorStop(1, withAlpha(palette.visBar, 0.05 + dropAlpha))
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, runtime.width, runtime.height)
+  ctx.restore()
 
   for (let i = 0; i < barCount; i++) {
     const v = (freq[i] ?? 0) / 255
     const barHeight = v * 110
 
-    ctx.fillStyle = withAlpha(palette.visBar, v * 0.6)
+    ctx.fillStyle = withAlpha(palette.visBar, v * 0.6 + surgeAlpha * 0.4)
     ctx.fillRect(
       i * barWidth,
       runtime.groundY - barHeight + 6,
@@ -143,18 +165,18 @@ export function drawAudioVisualizer(
 export function drawShockwaves(ctx: CanvasRenderingContext2D, runtime: GameRuntime, palette: Palette) {
   for (const s of runtime.shockwaves) {
     ctx.save()
-    ctx.globalAlpha = s.alpha * 0.9
+    ctx.globalAlpha = s.alpha * 0.65
     const halfW = (s.w || 0) / 2
     const h = s.h || 12
-    const color = s.intense ? '#fcd34d' : palette.beat
+    const color = s.intense ? '#f7e07a' : '#a5b4fc'
     const grad = ctx.createLinearGradient(s.x - halfW, s.y, s.x + halfW, s.y)
     grad.addColorStop(0, withAlpha(color, 0))
-    grad.addColorStop(0.5, withAlpha(color, 0.65))
+    grad.addColorStop(0.5, withAlpha(color, 0.45))
     grad.addColorStop(1, withAlpha(color, 0))
     ctx.fillStyle = grad
     ctx.fillRect(s.x - halfW, s.y - h / 2, s.w || 0, h)
-    ctx.shadowColor = withAlpha(color, 0.25)
-    ctx.shadowBlur = s.intense ? 12 : 6
+    ctx.shadowColor = withAlpha(color, 0.18)
+    ctx.shadowBlur = s.intense ? 8 : 4
     ctx.fillRect(s.x - halfW, s.y - h / 2, s.w || 0, h)
     ctx.restore()
   }
@@ -236,8 +258,15 @@ export function drawPhaseOverlay(ctx: CanvasRenderingContext2D, runtime: GameRun
 
   if (ui.beatPulse.value) {
     ctx.save()
-    const g = ctx.createRadialGradient(runtime.player.x + runtime.player.width / 2, runtime.groundY, 20, runtime.player.x + runtime.player.width / 2, runtime.groundY, 280)
-    g.addColorStop(0, withAlpha(palette.visWave, 0.22))
+    const g = ctx.createRadialGradient(
+      runtime.player.x + runtime.player.width / 2,
+      runtime.groundY,
+      12,
+      runtime.player.x + runtime.player.width / 2,
+      runtime.groundY,
+      220
+    )
+    g.addColorStop(0, withAlpha(palette.visWave, 0.14))
     g.addColorStop(1, withAlpha(palette.visWave, 0))
     ctx.fillStyle = g
     ctx.fillRect(0, 0, runtime.width, runtime.height)
@@ -248,7 +277,7 @@ export function drawPhaseOverlay(ctx: CanvasRenderingContext2D, runtime: GameRun
 export function drawFlash(ctx: CanvasRenderingContext2D, runtime: GameRuntime) {
   if (runtime.flashTimer > 0) {
     ctx.save()
-    const alpha = Math.max(0, Math.min(1, runtime.flashTimer / 0.14)) * 0.7
+    const alpha = Math.max(0, Math.min(1, runtime.flashTimer / 0.14)) * 0.45
     ctx.fillStyle = `rgba(250, 250, 255, ${alpha})`
     ctx.fillRect(0, 0, runtime.width, runtime.height)
     ctx.restore()

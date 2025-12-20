@@ -106,9 +106,9 @@ export function applyBlastStrikes(
     runtime.shockwaves.push({
       x: runtime.player.x + runtime.player.width / 2 + 40,
       y: runtime.player.y + runtime.player.height / 2,
-      w: 80,
-      h: 12,
-      alpha: 0.5,
+      w: 70,
+      h: 10,
+      alpha: 0.3,
     })
     playSfx?.('blast', 0.8)
   }

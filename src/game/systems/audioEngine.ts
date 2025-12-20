@@ -24,6 +24,16 @@ export function createAudioEngine() {
   let midEnergy = 0
   let highEnergy = 0
   let intensity = 0
+  let loudness = 0
+  let loudnessDelta = 0
+  let drive = 0
+  let driveDelta = 0
+  let loudnessMean = 0
+  let loudnessVar = 0
+  let intensityMean = 0
+  let intensityVar = 0
+  let bandMean = 0
+  let bandVar = 0
   let slapMix: GainNode | null = null
   let sfxGain: GainNode | null = null
 
@@ -110,6 +120,48 @@ export function createAudioEngine() {
 
     const raw = bassEnergy * 0.4 + midEnergy * 0.25 + highEnergy * 0.15
     intensity += (raw - intensity) * 0.03
+
+    // Loudness and change detection to drive spawn surges
+    let sumSq = 0
+    for (let i = 0; i < time.length; i++) {
+      const sample = (time[i] ?? 128) - 128
+      sumSq += sample * sample
+    }
+    const rms = Math.sqrt(sumSq / Math.max(1, time.length)) / 128
+    const prevLoud = loudness
+    loudness += (rms - loudness) * 0.12
+    loudnessDelta = (loudness - prevLoud) * 1.6
+
+    const bandRaw = bassEnergy * 0.55 + midEnergy * 0.35 + highEnergy * 0.25
+    const updateStats = (value: number, mean: number, variance: number, alpha: number) => {
+      const nextMean = mean + (value - mean) * alpha
+      const delta = value - nextMean
+      const nextVar = variance + (delta * delta - variance) * alpha
+      return { mean: nextMean, variance: nextVar }
+    }
+
+    const sL = updateStats(loudness, loudnessMean, loudnessVar, 0.02)
+    loudnessMean = sL.mean
+    loudnessVar = sL.variance
+    const sI = updateStats(intensity, intensityMean, intensityVar, 0.02)
+    intensityMean = sI.mean
+    intensityVar = sI.variance
+    const sB = updateStats(bandRaw, bandMean, bandVar, 0.02)
+    bandMean = sB.mean
+    bandVar = sB.variance
+
+    const z = (value: number, mean: number, variance: number) => {
+      const std = Math.sqrt(Math.max(1e-6, variance))
+      return (value - mean) / std
+    }
+    const lz = z(loudness, loudnessMean, loudnessVar)
+    const iz = z(intensity, intensityMean, intensityVar)
+    const bz = z(bandRaw, bandMean, bandVar)
+
+    const targetDrive = Math.max(0, Math.min(1, 0.42 + 0.14 * lz + 0.16 * iz + 0.12 * bz))
+    const prevDrive = drive
+    drive += (targetDrive - drive) * 0.08
+    driveDelta = (drive - prevDrive) * 2.2
   }
 
   function resetEnergy() {
@@ -117,6 +169,16 @@ export function createAudioEngine() {
     midEnergy = 0
     highEnergy = 0
     intensity = 0
+    loudness = 0
+    loudnessDelta = 0
+    drive = 0
+    driveDelta = 0
+    loudnessMean = 0
+    loudnessVar = 0
+    intensityMean = 0
+    intensityVar = 0
+    bandMean = 0
+    bandVar = 0
   }
 
   function applyPlaybackRate(rate: number) {
@@ -251,6 +313,10 @@ export function createAudioEngine() {
     get mids() { return midEnergy },
     get highs() { return highEnergy },
     get intensity() { return intensity },
+    get loudness() { return loudness },
+    get loudnessDelta() { return loudnessDelta },
+    get drive() { return drive },
+    get driveDelta() { return driveDelta },
     get analyser() { return analyser },
     get freqData() { return freqData },
     get timeData() { return timeData },

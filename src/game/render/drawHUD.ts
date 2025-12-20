@@ -62,26 +62,72 @@ export function drawHUD(
   ctx.textAlign = 'right'
 
   const bpmX = runtime.width - pad
-  ctx.fillStyle = '#fde68a'
-  ctx.fillText(`BPM ${Math.round(audio.bpm)}`, bpmX, pad + 10)
 
   const intensityBarWidth = 120
   const iFill = audio.intensity * intensityBarWidth
 
   ctx.fillStyle = '#020617'
-  ctx.fillRect(runtime.width - intensityBarWidth - pad, pad + 18, intensityBarWidth, 8)
+  ctx.fillRect(runtime.width - intensityBarWidth - pad, pad + 12, intensityBarWidth, 8)
 
   ctx.fillStyle = '#a855f7'
-  ctx.fillRect(runtime.width - intensityBarWidth - pad, pad + 18, iFill, 8)
+  ctx.fillRect(runtime.width - intensityBarWidth - pad, pad + 12, iFill, 8)
 
   ctx.strokeStyle = '#f472b6'
-  ctx.strokeRect(runtime.width - intensityBarWidth - pad, pad + 18, intensityBarWidth, 8)
+  ctx.strokeRect(runtime.width - intensityBarWidth - pad, pad + 12, intensityBarWidth, 8)
 
   ctx.fillStyle = '#e5e7eb'
-  ctx.fillText('INTENSITY', bpmX, pad + 40)
+  ctx.fillText('INTENSITY', bpmX, pad + 32)
+
+  // Beat pulse indicator
+  const beatX = runtime.width - intensityBarWidth - pad - 20
+  const beatY = pad + 16
+  const beatMs = 60000 / Math.max(1, ui.bpm.value)
+  const nearestEnemy = runtime.enemies
+    .filter(e => e.alive && !e.squished && e.x + e.width > runtime.player.x)
+    .sort((a, b) => a.x - b.x)[0]
+  const indicatorX = nearestEnemy ? nearestEnemy.x + nearestEnemy.width / 2 : runtime.width - pad - 20
+  const beatPhase = Math.min(1, (performance.now() - runtime.lastBeatTime) / beatMs)
+  const cycle = (runtime.beatIndex % 4) as 0 | 1 | 2 | 3
+  const colors = [
+    'rgba(56, 189, 248, 0.12)',
+    'rgba(94, 234, 212, 0.12)',
+    'rgba(244, 114, 182, 0.12)',
+    'rgba(167, 139, 250, 0.12)',
+  ] as const
+  const strokeColors = [
+    'rgba(94, 234, 212, 0.25)',
+    'rgba(56, 189, 248, 0.25)',
+    'rgba(244, 114, 182, 0.25)',
+    'rgba(167, 139, 250, 0.25)',
+  ] as const
+  const outerR = 18
+  const macroPhase = Math.min(1, ((runtime.beatIndex % 4) + beatPhase) / 4)
+  const converge = 1 - macroPhase
+  const ringR = outerR * (0.35 + 0.65 * converge)
+  const innerR = 4 + converge * 5
+
+  ctx.save()
+  ctx.translate(indicatorX, runtime.groundY + 6)
+  ctx.lineWidth = 2
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.4)'
+  ctx.beginPath()
+  ctx.arc(1.5, 1.5, outerR + 2, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.strokeStyle = strokeColors[cycle]
+  ctx.beginPath()
+  ctx.arc(0, 0, ringR, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.fillStyle = colors[cycle]
+  ctx.beginPath()
+  ctx.arc(0, 0, innerR, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.restore()
 
   ctx.fillStyle = '#fcd34d'
-  ctx.fillText(`Combo X${Math.max(1, runtime.beatStreak)}`, bpmX, pad + 56)
+  ctx.fillText(`Combo X${Math.max(1, runtime.beatStreak)}`, bpmX, pad + 50)
 
   ctx.restore()
 }

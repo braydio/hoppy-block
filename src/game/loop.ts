@@ -3,6 +3,7 @@ import { createSpawnSystem, applyDifficultySettings, getDifficultySettings } fro
 import { isOnBeat, registerBeatAction } from './systems/beatSystem'
 import {
   captureInstantReplay,
+  ensureReplayRecorder,
   setupReplayRecorder,
   stopReplayRecorder,
 } from './systems/replaySystem'
@@ -409,6 +410,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
 
   function update(dtRaw: number) {
     const dt = dtRaw
+    ensureReplayRecorder(runtime)
     const beatMs = 60000 / audioEngine.bpm
     const now = performance.now()
     const prevGameOver = runtime.wasGameOver
@@ -629,6 +631,11 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
             mids: audioEngine.mids,
             highs: audioEngine.highs,
             intensity,
+            loudnessDelta: audioEngine.loudnessDelta,
+            drive: audioEngine.drive,
+            driveDelta: audioEngine.driveDelta,
+            audioTime: audioEngine.audio?.currentTime ?? 0,
+            trackDuration: audioEngine.audio?.duration ?? 0,
           })
         }
       }
@@ -642,6 +649,11 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
             mids: audioEngine.mids,
             highs: audioEngine.highs,
             intensity,
+            loudnessDelta: audioEngine.loudnessDelta,
+            drive: audioEngine.drive,
+            driveDelta: audioEngine.driveDelta,
+            audioTime: audioEngine.audio?.currentTime ?? 0,
+            trackDuration: audioEngine.audio?.duration ?? 0,
           })
         }
       }
@@ -825,21 +837,26 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       )
     }
 
-    for (const s of runtime.shockwaves) {
-      s.w = (s.w || 0) + 2000 * dt * (s.intense ? 1.2 : 1)
-      s.alpha -= (s.intense ? 2 : 1.8) * dt
+    for (let i = runtime.shockwaves.length - 1; i >= 0; i--) {
+      const s = runtime.shockwaves[i]
+      s.w = (s.w || 0) + 1400 * dt * (s.intense ? 1.1 : 0.9)
+      s.alpha -= (s.intense ? 1.6 : 1.4) * dt
+      if (s.alpha <= 0 || s.w >= runtime.width * 2) runtime.shockwaves.splice(i, 1)
     }
-    runtime.shockwaves = runtime.shockwaves.filter(s => s.alpha > 0 && s.w < runtime.width * 2)
 
-    for (const s of runtime.sonicBursts) {
+    for (let i = runtime.sonicBursts.length - 1; i >= 0; i--) {
+      const s = runtime.sonicBursts[i]
       s.r += 1800 * dt
       s.alpha -= 2.2 * dt
+      if (s.alpha <= 0) runtime.sonicBursts.splice(i, 1)
     }
-    runtime.sonicBursts = runtime.sonicBursts.filter(s => s.alpha > 0)
 
-    runtime.spawnBeacons = runtime.spawnBeacons
-      .map(b => ({ ...b, alpha: b.alpha - dt * 1.4 }))
-      .filter(b => b.alpha > 0)
+    for (let i = runtime.spawnBeacons.length - 1; i >= 0; i--) {
+      const b = runtime.spawnBeacons[i]
+      if (!b) continue
+      b.alpha -= dt * 1.4
+      if (b.alpha <= 0) runtime.spawnBeacons.splice(i, 1)
+    }
 
     for (const p of runtime.scorePops) {
       p.y += p.vy * dt
@@ -856,14 +873,14 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.playerFragments = runtime.playerFragments.filter(f => f.alpha > 0)
 
     if (runtime.requestReplayCapture) {
-      try {
-        captureInstantReplay(runtime, ui)
-      } catch (err) {
-        console.warn('replay capture failed', err)
-        ui.snapshotMessageTimer.value = 0
-      } finally {
-        runtime.requestReplayCapture = false
+      const promise = captureInstantReplay(runtime, ui)
+      if (promise && 'catch' in promise) {
+        promise.catch(err => {
+          console.warn('replay capture failed', err)
+          ui.snapshotMessageTimer.value = 0
+        })
       }
+      runtime.requestReplayCapture = false
     }
 
     if (!runtime.player.onGround) {
@@ -895,9 +912,9 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
         runtime.shockwaves.push({
           x: runtime.player.x + runtime.player.width / 2,
           y: runtime.groundY,
-          w: 90 * slamPower,
-          h: 12 + (intenseSlam ? 6 : 0),
-          alpha: 0.5,
+          w: 80 * slamPower,
+          h: 10 + (intenseSlam ? 4 : 0),
+          alpha: intenseSlam ? 0.45 : 0.32,
           intense: intenseSlam,
         })
         audioEngine.playSfx('slam', intenseSlam ? 1 : 0.8)
@@ -1084,7 +1101,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
 
   function loop(timestamp: number) {
     if (!runtime.lastTimestamp) runtime.lastTimestamp = timestamp
-    const dt = (timestamp - runtime.lastTimestamp) / 1000
+    const frameDt = (timestamp - runtime.lastTimestamp) / 1000
+    const dt = Math.min(frameDt, 0.05)
     runtime.lastTimestamp = timestamp
 
     update(dt)
