@@ -2,13 +2,12 @@ import { clamp, lerp } from './systems/physicsSystem'
 import { createSpawnSystem, applyDifficultySettings, getDifficultySettings } from './systems/spawnSystem'
 import { isOnBeat, registerBeatAction } from './systems/beatSystem'
 import {
-  captureInstantReplay,
   ensureReplayRecorder,
   setupReplayRecorder,
   stopReplayRecorder,
 } from './systems/replaySystem'
 import { createAudioEngine } from './systems/audioEngine'
-import { triggerSquishBounce, applyBlastStrikes, applySlideStrike, addScore } from './systems/combatSystem'
+import { triggerSquishBounce, applyBlastStrikes, applySlideStrike, addScore, registerAirKill } from './systems/combatSystem'
 import {
   DEFAULT_TRACK,
   DASH_WINDOW_MS,
@@ -26,7 +25,6 @@ import {
   PHASE_COST,
   PHASE_COOLDOWN,
   DOUBLE_JUMP_COST,
-  PARRY_COST,
   INTENSE_SLAM_HEIGHT,
   CHARGE_DRAIN_RATE,
   CHARGE_REGEN_GROUND,
@@ -44,6 +42,7 @@ import {
   drawHatBursts,
   drawObstacles,
   drawPhaseOverlay,
+  drawPowerTint,
   drawScorePops,
   drawShockwaves,
   drawSonicBursts,
@@ -57,6 +56,94 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
   const audioEngine = createAudioEngine()
   const spawns = createSpawnSystem(runtime, ui)
   const { addBase, addBonus } = addScore(ui, runtime)
+  let lastCelebrationStreak = 0
+  const celebrationPools = {
+    three: [
+      'TRICKY!',
+      'RADICAL!',
+      'SWEET STYLE!',
+      'BONUS BOOST!',
+      'SPIN THAT!',
+      'HYPE POP!',
+      'HERO MOVE!',
+      'SLICK RUN!',
+      'SPEED DEMO!',
+      'AIR ROYAL!',
+    ],
+    four: [
+      'SUPER TRICKY!',
+      'STYLE MONSTER!',
+      'TURBO CHARGE!',
+      'LORD OF LIFT!',
+      'WICKED FLOW!',
+      'BOOST BARON!',
+      'ROYAL SPIN!',
+      'MEGA MOVE!',
+      'GLORY RIDE!',
+      'THRONE TAKE!',
+    ],
+    five: [
+      'ULTRA TRICKY!',
+      'CROWN GRAB!',
+      'FEUDAL FLIP!',
+      'THRUSTER FLEX!',
+      'MAJESTIC!',
+      'WARLORD RUN!',
+      'NOBLE BOOST!',
+      'SOVEREIGN!',
+      'SKY KNIGHT!',
+      'HEIR APPARENT!',
+    ],
+    sixPlus: [
+      'HYPER TRICKY!',
+      'IMPERIAL!',
+      'GALACTIC ROYALTY!',
+      'SPACE LORD!',
+      'THRONE OF AIR!',
+      'COSMIC CLAP!',
+      'CROWNED!',
+      'CELESTIAL!',
+      'FEUDAL FINALE!',
+      'OUTRAGEOUS!',
+      'GODLIKE!',
+      'ABSURDITY!',
+    ],
+  } as const
+  const subtitlePool = [
+    'Baron of boost!',
+    'Feudal thrusters engaged!',
+    'Royal airspace claimed!',
+    'Knighted in neon!',
+    'Castle‑grade combo!',
+    'Star‑court swagger!',
+    'Cathedral‑core carve!',
+    'Orbital chivalry!',
+    'Lance of lightning!',
+    'Crown‑line critical!',
+    'Banner‑wave velocity!',
+    'Squire to spire!',
+  ] as const
+
+  function triggerCelebration(streak: number) {
+    if (ui.gameOver.value) return
+    let pool = celebrationPools.three
+    let tier = 3
+    if (streak >= 6) pool = celebrationPools.sixPlus
+    else if (streak >= 5) pool = celebrationPools.five
+    else if (streak >= 4) pool = celebrationPools.four
+    if (streak >= 6) tier = 6
+    else if (streak >= 5) tier = 5
+    else if (streak >= 4) tier = 4
+    const pick = pool[Math.floor(Math.random() * pool.length)] ?? 'TRICKY!'
+    ui.celebrationMessage.value = pick
+    ui.celebrationSubtitle.value = subtitlePool[Math.floor(Math.random() * subtitlePool.length)] ?? 'Feudal thrusters engaged!'
+    ui.celebrationTier.value = tier
+    ui.celebrationVisible.value = true
+    ui.celebrationTimer.value = 2.8
+    ui.snapshotMessageTimer.value = 2.2
+    runtime.flashTimer = Math.max(runtime.flashTimer, 0.08)
+    runtime.flashColor = '56, 189, 248'
+  }
 
   function addCharge(amount: number) {
     ui.charge.value = clamp(ui.charge.value + amount, 0, 100)
@@ -73,7 +160,9 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     ui.gameOver.value = false
     ui.started.value = false
     ui.charge.value = 50
+    ui.paused.value = false
     runtime.deathByEnemy = false
+    runtime.powerTint = { r: 0, g: 0, b: 0, alpha: 0 }
 
     runtime.phaseActive = false
     runtime.phaseTimer = 0
@@ -120,6 +209,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.scoreMultiplier = 1
     runtime.airComboMultiplier = 1
     runtime.airComboStreak = 0
+    runtime.airKillCombo = 0
     runtime.lastBeatActionTime = 0
     runtime.slamOriginY = null
     runtime.dashGhosts = []
@@ -130,6 +220,12 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       URL.revokeObjectURL(ui.replayVideoUrl.value)
       ui.replayVideoUrl.value = null
     }
+    ui.celebrationVisible.value = false
+    ui.celebrationTimer.value = 0
+    ui.celebrationMessage.value = ''
+    ui.celebrationTier.value = 0
+    ui.celebrationSubtitle.value = ''
+    ui.spawnLog.value = []
     runtime.replayBuffer = []
     runtime.slideActive = false
     runtime.slideTimer = 0
@@ -137,6 +233,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.slideElapsed = 0
     runtime.slideTargetX = 0
     runtime.flashTimer = 0
+    runtime.flashColor = undefined
     ui.introCollapsing.value = false
     ui.started.value = false
     ui.canSaveScore.value = false
@@ -154,6 +251,9 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.lastEnemySpawnBeat = -1
     runtime.lastObstacleSpawnBeat = -1
     runtime.comboGraceTimer = 0
+    runtime.spawnEvents = []
+    runtime.spawnHistory = []
+    runtime.spawnDebugTicks = []
     // Give players something to react to immediately.
     spawns.spawnObstacle({ nearStart: true })
     spawns.spawnEnemy('gomba')
@@ -169,7 +269,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
   function startObstacleSpawner() {
     if (runtime.obstacleSpawnIntervalId) clearInterval(runtime.obstacleSpawnIntervalId)
     runtime.obstacleSpawnIntervalId = window.setInterval(() => {
-      if (!ui.started.value || ui.gameOver.value) return
+      if (!ui.started.value || ui.gameOver.value || ui.paused.value) return
       const hasNearRight = runtime.obstacles.some(o => runtime.width - o.x < 220)
       if (!hasNearRight) spawns.spawnObstacle()
     }, 1200)
@@ -223,10 +323,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       beginRun()
     }
 
-    if (ui.gameOver.value) {
-      resetGame()
-      return
-    }
+    if (ui.gameOver.value) return
 
     maybeGrantBeatJumpCharge()
 
@@ -330,46 +427,6 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     }
   }
 
-  function handleParry() {
-    startAudio()
-    if (ui.gameOver.value) return
-    if (!ui.started.value && !ui.gameOver.value) {
-      beginRun()
-    }
-
-    const onBeat = isOnBeat(runtime, ui, audioEngine.started, 70)
-    if (!onBeat && ui.charge.value < PARRY_COST) return
-
-    if (onBeat) {
-      addCharge(8)
-    } else {
-      consumeCharge(PARRY_COST)
-    }
-
-    runtime.invulnTimer = Math.max(runtime.invulnTimer, 0.9)
-    registerBeatAction(runtime, onBeat)
-
-    const radius = 140
-    runtime.enemies = runtime.enemies.map(e => {
-      const cx = e.x + e.width / 2
-      const cy = e.y + e.height / 2
-      const dx = cx - (runtime.player.x + runtime.player.width / 2)
-      const dy = cy - (runtime.player.y + runtime.player.height / 2)
-      const dist = Math.hypot(dx, dy)
-      if (dist < radius && e.alive && !e.squished) {
-        addBonus(120)
-        return { ...e, squished: true, alive: false, squishTimer: 0.12, currentHeight: e.height }
-      }
-      return e
-    })
-
-    runtime.sonicBursts.push({
-      x: runtime.player.x + runtime.player.width / 2,
-      y: runtime.player.y + runtime.player.height / 2,
-      r: radius / 2,
-      alpha: 1,
-    })
-  }
 
   function applyBlast() {
     applyBlastStrikes(runtime, addBonus, addCharge, audioEngine.playSfx)
@@ -382,9 +439,10 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
   function beginRun() {
     if (ui.started.value || ui.gameOver.value) return
     ui.introCollapsing.value = true
+    ui.started.value = true
     setTimeout(() => {
-      ui.started.value = true
-    }, 320)
+      ui.introCollapsing.value = false
+    }, 360)
   }
 
   function startSlide() {
@@ -411,6 +469,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
   function update(dtRaw: number) {
     const dt = dtRaw
     ensureReplayRecorder(runtime)
+    audioEngine.setDebugTimelineEnabled(ui.debugAudioSpawnView.value)
     const beatMs = 60000 / audioEngine.bpm
     const now = performance.now()
     const prevGameOver = runtime.wasGameOver
@@ -563,9 +622,23 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       }
     }
 
-    if (runtime.beatStreak > 0 && performance.now() - runtime.lastBeatActionTime > 4000) {
+    if (runtime.beatStreak > 0 && performance.now() - runtime.lastBeatActionTime > 2000) {
       runtime.beatStreak = 0
       runtime.scoreMultiplier = 1
+    }
+
+    if (!ui.started.value) {
+      lastCelebrationStreak = 0
+    } else {
+      if (runtime.beatStreak === 0 && lastCelebrationStreak >= 3) {
+        triggerCelebration(lastCelebrationStreak)
+      }
+      lastCelebrationStreak = runtime.beatStreak
+    }
+
+    if (ui.celebrationTimer.value > 0) {
+      ui.celebrationTimer.value = Math.max(0, ui.celebrationTimer.value - dtRaw)
+      if (ui.celebrationTimer.value <= 0) ui.celebrationVisible.value = false
     }
 
     if (runtime.hangActive || runtime.slowActive) {
@@ -581,6 +654,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       runtime.hangActive = false
       runtime.slowActive = false
     }
+
+    updatePowerTint(dtRaw)
 
     for (const e of runtime.enemies) {
     e.squishImpulse = (e.squishImpulse || 0) * 0.86
@@ -663,7 +738,13 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     if (ui.started.value && !ui.gameOver.value) {
       addBase(baseGain)
     }
-    const speedFactor = 1 + ui.score.value / 8000
+    const maxSpeed = 1.5
+    const trackDuration = audioEngine.audio?.duration ?? 0
+    const trackProgress = trackDuration > 0
+      ? Math.max(0, Math.min(1, (audioEngine.audio?.currentTime ?? 0) / trackDuration))
+      : 1
+    const speedCap = 1 + (maxSpeed - 1) * trackProgress
+    const speedFactor = Math.min(speedCap, 1 + ui.score.value / 16000)
     ui.speed.value = speedFactor
     runtime.scrollSpeed = runtime.baseScrollSpeed * speedFactor
     if (!audioEngine.started && ui.started.value && !ui.gameOver.value) {
@@ -754,22 +835,23 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
             alpha: 0.8,
           })
 
-          runtime.scorePops.push({
-            x: e.x + e.width / 2,
-            y: e.y,
-            value: 280,
-            alpha: 1,
-            vy: -80,
-          })
-        } else if (e.type === 'gomba' && runtime.isSlamming && e.alive && !e.squished) {
-          e.squished = true
-          e.alive = false
-          e.squishTimer = 0.18
-          e.currentHeight = e.height
-          addBonus(250)
-          addCharge(12)
-          audioEngine.playSfx('enemyPop', 0.7)
-          triggerSquishBounce(runtime, 1, audioEngine.playSfx)
+        runtime.scorePops.push({
+          x: e.x + e.width / 2,
+          y: e.y,
+          value: 280,
+          alpha: 1,
+          vy: -80,
+        })
+        registerAirKill(runtime)
+      } else if (e.type === 'gomba' && runtime.isSlamming && e.alive && !e.squished) {
+        e.squished = true
+        e.alive = false
+        e.squishTimer = 0.18
+        e.currentHeight = e.height
+        addBonus(250)
+        addCharge(12)
+        audioEngine.playSfx('enemyPop', 0.7)
+        triggerSquishBounce(runtime, 1, audioEngine.playSfx)
 
           runtime.sonicBursts.push({
             x: e.x + e.width / 2,
@@ -778,31 +860,35 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
             alpha: 0.8,
           })
 
-          runtime.scorePops.push({
-            x: e.x + e.width / 2,
-            y: e.y,
-            value: 250,
-            alpha: 1,
-            vy: -80,
-          })
-        } else if (e.type === 'floater' && runtime.isSlamming && e.alive) {
-          const enraged = (e.rage ?? 0) > 0.85
-          if (!enraged || runtime.slowActive || runtime.hangActive) {
-            e.alive = false
-            addBonus(enraged ? 500 : 400)
-            addCharge(enraged ? 30 : 20)
-            audioEngine.playSfx('enemyPop', enraged ? 1 : 0.8)
-            triggerSquishBounce(runtime, 1.1, audioEngine.playSfx)
+        runtime.scorePops.push({
+          x: e.x + e.width / 2,
+          y: e.y,
+          value: 250,
+          alpha: 1,
+          vy: -80,
+        })
+        registerAirKill(runtime)
+      } else if (e.type === 'floater' && runtime.isSlamming && e.alive) {
+        const enraged = (e.rage ?? 0) > 0.85
+        if (!enraged || runtime.slowActive || runtime.hangActive) {
+          e.alive = false
+          addBonus(enraged ? 500 : 400)
+          addCharge(enraged ? 30 : 20)
+          audioEngine.playSfx('enemyPop', enraged ? 1 : 0.8)
+          triggerSquishBounce(runtime, 1.1, audioEngine.playSfx)
 
-            runtime.sonicBursts.push({
-              x: e.x + e.width / 2,
-              y: e.y + e.height / 2,
-              r: 0,
-              alpha: 0.9,
-            })
-          } else {
-            ui.gameOver.value = true
-            runtime.deathByEnemy = true
+          runtime.sonicBursts.push({
+            x: e.x + e.width / 2,
+            y: e.y + e.height / 2,
+            r: 0,
+            alpha: 0.9,
+          })
+          registerAirKill(runtime)
+        } else {
+            if (!ui.invincible.value) {
+              ui.gameOver.value = true
+              runtime.deathByEnemy = true
+            }
           }
         } else if (e.alive && !e.squished) {
           if (!runtime.graceUsed) {
@@ -816,9 +902,11 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
               alpha: 0.8,
             })
           } else if (runtime.invulnTimer <= 0) {
-            ui.gameOver.value = true
-            runtime.deathByEnemy = true
-            runtime.deathSlowTimer = 0.9
+            if (!ui.invincible.value) {
+              ui.gameOver.value = true
+              runtime.deathByEnemy = true
+              runtime.deathSlowTimer = 0.9
+            }
           }
         }
       }
@@ -873,13 +961,6 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.playerFragments = runtime.playerFragments.filter(f => f.alpha > 0)
 
     if (runtime.requestReplayCapture) {
-      const promise = captureInstantReplay(runtime, ui)
-      if (promise && 'catch' in promise) {
-        promise.catch(err => {
-          console.warn('replay capture failed', err)
-          ui.snapshotMessageTimer.value = 0
-        })
-      }
       runtime.requestReplayCapture = false
     }
 
@@ -902,6 +983,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       runtime.player.y = runtime.groundY - runtime.player.height
       runtime.player.vy = 0
       runtime.player.onGround = true
+      runtime.airKillCombo = 0
       runtime.airJumps = 1
       if (!(runtime.comboGraceTimer && runtime.comboGraceTimer > 0)) {
         runtime.airComboMultiplier = 1
@@ -1044,9 +1126,11 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
                 alpha: 0.7,
               })
             } else if (runtime.invulnTimer <= 0) {
-              ui.gameOver.value = true
-              runtime.deathByEnemy = true
-              runtime.deathSlowTimer = 0.9
+              if (!ui.invincible.value) {
+                ui.gameOver.value = true
+                runtime.deathByEnemy = true
+                runtime.deathSlowTimer = 0.9
+              }
             }
           }
         }
@@ -1059,6 +1143,9 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       audioEngine.playSfx('death', 1)
       ui.canSaveScore.value = true
       ui.savedCurrentRun.value = false
+      ui.celebrationVisible.value = false
+      ui.celebrationTimer.value = 0
+      ui.snapshotMessageTimer.value = 0
     }
   }
 
@@ -1089,6 +1176,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     drawObstacles(ctx, runtime, palette)
     drawEnemies(ctx, runtime, palette)
     drawPhaseOverlay(ctx, runtime, palette, ui)
+    drawPowerTint(ctx, runtime)
     drawFlash(ctx, runtime)
 
     ctx.restore()
@@ -1105,22 +1193,33 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     const dt = Math.min(frameDt, 0.05)
     runtime.lastTimestamp = timestamp
 
-    update(dt)
+    if (!ui.paused.value) update(dt)
     draw()
 
     runtime.animationId = requestAnimationFrame(loop)
   }
 
   function handleClick() {
-    handleJump()
+    if (!ui.paused.value) handleJump()
   }
 
   const handleTouch = (e: TouchEvent) => {
     e.preventDefault()
-    handleJump()
+    if (!ui.paused.value) handleJump()
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    if (ui.gameOver.value && matchesKey('restart', e.code, keybinds)) {
+      e.preventDefault()
+      resetGame()
+      return
+    }
+    if (matchesKey('pause', e.code, keybinds)) {
+      e.preventDefault()
+      togglePause()
+      return
+    }
+    if (ui.paused.value) return
     if (matchesKey('jump', e.code, keybinds)) {
       e.preventDefault()
       handleJump()
@@ -1137,10 +1236,6 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       e.preventDefault()
       handlePhase()
     }
-    if (matchesKey('parry', e.code, keybinds)) {
-      e.preventDefault()
-      handleParry()
-    }
     if (matchesKey('antigrav', e.code, keybinds)) {
       e.preventDefault()
       if (!runtime.hangActive) audioEngine.playSfx('antigravOn', 0.7)
@@ -1154,8 +1249,87 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
   }
 
   function handleKeyup(e: KeyboardEvent) {
+    if (ui.paused.value) return
     if (matchesKey('antigrav', e.code, keybinds)) runtime.hangActive = false
     if (matchesKey('slowmo', e.code, keybinds)) runtime.slowActive = false
+  }
+
+  function updatePowerTint(dtRaw: number) {
+    const active: Array<{ r: number; g: number; b: number }> = []
+    if (runtime.phaseActive) active.push({ r: 168, g: 85, b: 247 })
+    if (runtime.dashActive) active.push({ r: 251, g: 113, b: 133 })
+    if (runtime.slowActive) active.push({ r: 56, g: 189, b: 248 })
+    if (runtime.hangActive) active.push({ r: 250, g: 204, b: 21 })
+
+    const target = { r: 0, g: 0, b: 0, alpha: 0 }
+    if (active.length > 0) {
+      for (const c of active) {
+        target.r += c.r
+        target.g += c.g
+        target.b += c.b
+      }
+      target.r /= active.length
+      target.g /= active.length
+      target.b /= active.length
+      target.alpha = Math.min(0.18, 0.08 + 0.03 * (active.length - 1))
+    }
+
+    const t = Math.min(1, dtRaw * 6)
+    runtime.powerTint.r = lerp(runtime.powerTint.r, target.r, t)
+    runtime.powerTint.g = lerp(runtime.powerTint.g, target.g, t)
+    runtime.powerTint.b = lerp(runtime.powerTint.b, target.b, t)
+    runtime.powerTint.alpha = lerp(runtime.powerTint.alpha, target.alpha, t)
+  }
+
+  function togglePause() {
+    if (ui.gameOver.value) return
+    ui.paused.value = !ui.paused.value
+    if (ui.paused.value) {
+      audioEngine.pause()
+    } else {
+      audioEngine.resume()
+    }
+  }
+
+  function setPaused(paused: boolean) {
+    if (ui.gameOver.value) return
+    ui.paused.value = paused
+    if (ui.paused.value) {
+      audioEngine.pause()
+    } else {
+      audioEngine.resume()
+    }
+  }
+
+  function seekToTime(seconds: number) {
+    if (!audioEngine.audio) return
+    const audio = audioEngine.audio
+    const duration = audio.duration || 0
+    const clamped = Math.max(0, Math.min(duration, seconds))
+    audio.currentTime = clamped
+
+    const beatMs = 60000 / Math.max(1, ui.bpm.value)
+    const beatSeconds = beatMs / 1000
+    runtime.beatIndex = Math.floor(clamped / beatSeconds)
+    const now = performance.now()
+    const beatOffset = (clamped % beatSeconds) * 1000
+    runtime.lastBeatTime = now - beatOffset
+    runtime.lastSubBeatTime = now - (beatOffset % (beatMs / 2))
+    runtime.lastEnemySpawnBeat = runtime.beatIndex - 1
+    runtime.lastObstacleSpawnBeat = runtime.beatIndex - 1
+
+    runtime.enemies = []
+    runtime.obstacles = []
+    runtime.spawnBeacons = []
+    runtime.scorePops = []
+    runtime.sonicBursts = []
+    runtime.shockwaves = []
+    runtime.spawnEvents = []
+    runtime.spawnHistory = []
+    runtime.spawnDebugTicks = []
+    ui.spawnLog.value = []
+
+    spawns.reset()
   }
 
   function setKeybind(action: string, event: KeyboardEvent) {
@@ -1205,7 +1379,6 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     handleSlam,
     handleBlast,
     handlePhase,
-    handleParry,
     handleAudioUpload,
     loadDefaultAudio,
     setDifficulty,
@@ -1213,5 +1386,19 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     keyLabel,
     resetGame,
     startAudio,
+    togglePause,
+    setPaused,
+    seekToTime,
+    getLevelMapData: () => ({
+      map: audioEngine.levelMap,
+      currentTime: audioEngine.audio?.currentTime ?? 0,
+      spawnEvents: runtime.spawnEvents,
+    }),
+    getSpawnDebugData: () => ({
+      timeline: audioEngine.audioTimeline,
+      spawnHistory: runtime.spawnHistory,
+      spawnTicks: runtime.spawnDebugTicks,
+      currentTime: audioEngine.audio?.currentTime ?? 0,
+    }),
   }
 }

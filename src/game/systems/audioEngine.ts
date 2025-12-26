@@ -36,6 +36,23 @@ export function createAudioEngine() {
   let bandVar = 0
   let slapMix: GainNode | null = null
   let sfxGain: GainNode | null = null
+  let levelMap: {
+    bpm: number
+    duration: number
+    beatDuration: number
+    beatIntensities: number[]
+    maxIntensity: number
+  } | null = null
+  const audioTimeline: Array<{
+    time: number
+    bass: number
+    mids: number
+    highs: number
+    intensity: number
+    drive: number
+    loudnessDelta: number
+  }> = []
+  let debugTimelineEnabled = false
 
   async function configure(trackUrl: string, getArrayBuffer?: () => Promise<ArrayBuffer>) {
     audio?.pause()
@@ -89,6 +106,9 @@ export function createAudioEngine() {
       const buf = await getArrayBuffer()
       const decoded = await audioCtx.decodeAudioData(buf)
       bpm = detectBPMFromBuffer(decoded)
+      levelMap = buildLevelMap(decoded, bpm)
+    } else {
+      levelMap = null
     }
 
     audioStarted = false
@@ -99,6 +119,18 @@ export function createAudioEngine() {
     if (audioCtx?.state === 'suspended') await audioCtx.resume()
     await audio.play()
     audioStarted = true
+  }
+
+  async function pause() {
+    if (!audio) return
+    audio.pause()
+    if (audioCtx?.state === 'running') await audioCtx.suspend()
+  }
+
+  async function resume() {
+    if (!audio || !audioStarted) return
+    if (audioCtx?.state === 'suspended') await audioCtx.resume()
+    if (audio.paused) await audio.play()
   }
 
   function updateEnergy() {
@@ -162,6 +194,19 @@ export function createAudioEngine() {
     const prevDrive = drive
     drive += (targetDrive - drive) * 0.08
     driveDelta = (drive - prevDrive) * 2.2
+
+    if (debugTimelineEnabled) {
+      audioTimeline.push({
+        time: audio?.currentTime ?? 0,
+        bass: bassEnergy,
+        mids: midEnergy,
+        highs: highEnergy,
+        intensity,
+        drive,
+        loudnessDelta,
+      })
+      if (audioTimeline.length > 600) audioTimeline.shift()
+    }
   }
 
   function resetEnergy() {
@@ -299,9 +344,52 @@ export function createAudioEngine() {
     return strongest ? Number(strongest[0]) : 120
   }
 
+  function buildLevelMap(buffer: AudioBuffer, detectedBpm: number) {
+    const beatDuration = 60 / Math.max(1, detectedBpm)
+    const totalBeats = Math.max(1, Math.ceil(buffer.duration / beatDuration))
+    const beatIntensities = new Array(totalBeats).fill(0)
+    const channel = buffer.getChannelData(0)
+    const sampleRate = buffer.sampleRate
+    let max = 0
+
+    for (let i = 0; i < totalBeats; i += 1) {
+      const start = Math.floor(i * beatDuration * sampleRate)
+      const end = Math.min(channel.length, Math.floor((i + 1) * beatDuration * sampleRate))
+      if (end <= start) break
+      const span = end - start
+      const step = Math.max(1, Math.floor(span / 2000))
+      let sum = 0
+      let count = 0
+      for (let s = start; s < end; s += step) {
+        const v = channel[s] ?? 0
+        sum += v * v
+        count += 1
+      }
+      const rms = Math.sqrt(sum / Math.max(1, count))
+      beatIntensities[i] = rms
+      if (rms > max) max = rms
+    }
+
+    if (max > 0) {
+      for (let i = 0; i < beatIntensities.length; i += 1) {
+        beatIntensities[i] = beatIntensities[i] / max
+      }
+    }
+
+    return {
+      bpm: detectedBpm,
+      duration: buffer.duration,
+      beatDuration,
+      beatIntensities,
+      maxIntensity: max,
+    }
+  }
+
   return {
     configure,
     start,
+    pause,
+    resume,
     updateEnergy,
     resetEnergy,
     applyPlaybackRate,
@@ -321,5 +409,11 @@ export function createAudioEngine() {
     get freqData() { return freqData },
     get timeData() { return timeData },
     get audio() { return audio },
+    get levelMap() { return levelMap },
+    get audioTimeline() { return audioTimeline },
+    setDebugTimelineEnabled(value: boolean) {
+      debugTimelineEnabled = value
+      if (!debugTimelineEnabled) audioTimeline.length = 0
+    },
   }
 }

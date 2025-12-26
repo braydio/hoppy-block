@@ -39,6 +39,93 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, runtime: GameRuntime, 
     runtime.player.height
   )
 
+  if (!ui.gameOver.value || !runtime.deathByEnemy) {
+    const w = runtime.player.width
+    const h = runtime.player.height
+    const left = -w / 2
+    const top = -h / 2
+
+    // Tail boom.
+    ctx.save()
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.5)'
+    ctx.fillRect(left + w * 0.46, top + h * 0.82, w * 0.08, h * 0.22)
+    ctx.restore()
+
+    // Winglets / flaps.
+    ctx.save()
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.55)'
+    ctx.beginPath()
+    ctx.moveTo(left + w * 0.08, top + h * 0.7)
+    ctx.lineTo(left - w * 0.16, top + h * 0.78)
+    ctx.lineTo(left + w * 0.08, top + h * 0.86)
+    ctx.closePath()
+    ctx.fill()
+    ctx.beginPath()
+    ctx.moveTo(left + w * 0.92, top + h * 0.7)
+    ctx.lineTo(left + w * 1.16, top + h * 0.78)
+    ctx.lineTo(left + w * 0.92, top + h * 0.86)
+    ctx.closePath()
+    ctx.fill()
+    ctx.restore()
+
+    // Hull trim for a feudal spacer-tech vibe.
+    ctx.save()
+    ctx.strokeStyle = 'rgba(15, 23, 42, 0.35)'
+    ctx.lineWidth = 2
+    ctx.strokeRect(left + 2, top + 2, w - 4, h - 4)
+
+    ctx.strokeStyle = 'rgba(226, 232, 240, 0.6)'
+    ctx.lineWidth = 1.4
+    ctx.beginPath()
+    ctx.moveTo(left + 4, top + h * 0.35)
+    ctx.lineTo(left + w - 4, top + h * 0.35)
+    ctx.moveTo(left + 4, top + h * 0.65)
+    ctx.lineTo(left + w - 4, top + h * 0.65)
+    ctx.stroke()
+    ctx.restore()
+
+    // Canopy window with a gothic arch feel.
+    ctx.save()
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.7)'
+    ctx.beginPath()
+    ctx.moveTo(left + w * 0.32, top + h * 0.2)
+    ctx.lineTo(left + w * 0.68, top + h * 0.2)
+    ctx.lineTo(left + w * 0.62, top + h * 0.48)
+    ctx.lineTo(left + w * 0.38, top + h * 0.48)
+    ctx.closePath()
+    ctx.fill()
+
+    ctx.strokeStyle = 'rgba(125, 211, 252, 0.7)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.restore()
+
+    // Side thrusters.
+    ctx.save()
+    ctx.fillStyle = 'rgba(34, 197, 94, 0.55)'
+    const thrusterW = w * 0.16
+    const thrusterH = h * 0.16
+    ctx.fillRect(left + w * 0.08, top + h * 0.72, thrusterW, thrusterH)
+    ctx.fillRect(left + w * 0.76, top + h * 0.72, thrusterW, thrusterH)
+    ctx.restore()
+
+    // Crest badge.
+    ctx.save()
+    ctx.fillStyle = 'rgba(250, 204, 21, 0.8)'
+    ctx.fillRect(left + w * 0.44, top + h * 0.7, w * 0.12, h * 0.18)
+    ctx.restore()
+
+    // Rivets.
+    ctx.save()
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.6)'
+    const rivet = (x: number, y: number) => ctx.fillRect(x, y, 2, 2)
+    rivet(left + 6, top + 6)
+    rivet(left + w - 8, top + 6)
+    rivet(left + 6, top + h - 8)
+    rivet(left + w - 8, top + h - 8)
+    ctx.restore()
+  }
+
   if (ui.gameOver.value && runtime.deathByEnemy) {
     const shardCount = 10
     for (let i = 0; i < shardCount; i++) {

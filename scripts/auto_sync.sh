@@ -48,18 +48,35 @@ DEV_LOG="${DEV_LOG:-logs/dev-server.log}"
 
 mkdir -p "$(dirname "$DEV_LOG")"
 
-cleanup() {
-  if [ -n "${DEV_PID:-}" ] && kill -0 "$DEV_PID" 2>/dev/null; then
-    kill "$DEV_PID"
+DEV_PID=""
+DEV_PGID=""
+
+start_dev() {
+  echo "Starting dev server: $DEV_CMD"
+  bash -lc "$DEV_CMD" > >(tee -a "$DEV_LOG") 2>&1 &
+  DEV_PID=$!
+  DEV_PGID="$(ps -o pgid= "$DEV_PID" | tr -d ' ')"
+}
+
+stop_dev() {
+  if [ -n "$DEV_PGID" ] && kill -0 "-$DEV_PGID" 2>/dev/null; then
+    kill "-$DEV_PGID"
     wait "$DEV_PID" 2>/dev/null || true
   fi
 }
 
+restart_dev() {
+  stop_dev
+  start_dev
+}
+
+cleanup() {
+  stop_dev
+}
+
 trap cleanup EXIT INT TERM
 
-echo "Starting dev server: $DEV_CMD"
-nohup bash -lc "$DEV_CMD" >>"$DEV_LOG" 2>&1 &
-DEV_PID=$!
+start_dev
 
 echo "Watching '$BRANCH' (remote '$REMOTE') every ${INTERVAL}s. Pull mode: $PULL_MODE."
 
@@ -76,9 +93,14 @@ while true; do
   if [ -n "$(git status --porcelain)" ] || [ "$local_sha" != "$remote_sha" ]; then
     commit_if_dirty
     if [ "$local_sha" != "$remote_sha" ]; then
+      pre_pull_sha="$(git rev-parse HEAD)"
       if ! pull_updates; then
         echo "Pull failed; resolve conflicts and rerun."
         exit 1
+      fi
+      post_pull_sha="$(git rev-parse HEAD)"
+      if [ "$pre_pull_sha" != "$post_pull_sha" ]; then
+        restart_dev
       fi
     fi
 

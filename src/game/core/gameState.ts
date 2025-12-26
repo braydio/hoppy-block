@@ -1,6 +1,7 @@
 import { reactive, ref } from 'vue'
 import type { Ref } from 'vue'
 import { defaultKeybinds, difficultyOptions, keybindOptions, PHASE_STATES } from './constants'
+import type { SpawnAttribution } from '../../debug/spawnCauses'
 import type { Enemy, Keybinds, Obstacle, Player } from './types'
 
 export interface UiState {
@@ -31,6 +32,15 @@ export interface UiState {
   replayVideoUrl: Ref<string | null>
   replayVisible: Ref<boolean>
   replayPlaybackKey: Ref<number>
+  celebrationVisible: Ref<boolean>
+  celebrationTimer: Ref<number>
+  celebrationMessage: Ref<string>
+  celebrationTier: Ref<number>
+  celebrationSubtitle: Ref<string>
+  spawnLog: Ref<SpawnLogEntry[]>
+  paused: Ref<boolean>
+  invincible: Ref<boolean>
+  debugAudioSpawnView: Ref<boolean>
 }
 
 export interface GameRuntime {
@@ -78,6 +88,7 @@ export interface GameRuntime {
   slideElapsed: number
   slideTargetX: number
   flashTimer: number
+  flashColor?: string
   phaseActive: boolean
   phaseTimer: number
   phaseModeIndex: number
@@ -92,6 +103,7 @@ export interface GameRuntime {
   lastBeatActionTime: number
   airComboMultiplier: number
   airComboStreak: number
+  airKillCombo: number
   slamOriginY: number | null
   deathByEnemy: boolean
   deathSlowTimer: number
@@ -101,10 +113,26 @@ export interface GameRuntime {
   replayRecorder: MediaRecorder | null
   replayBuffer: { data: Blob; t: number; type: string }[]
   replayStopTimeout: number | null
+  spawnEvents: { beat: number; isSubBeat: boolean; count: number; time: number }[]
+  spawnHistory: Array<{
+    enemyId?: number
+    attribution: SpawnAttribution
+    x: number
+    y: number
+    time: number
+    enemyType?: Enemy['type']
+  }>
+  spawnDebugTicks: Array<{
+    beat: number
+    time: number
+    targetPerBeat: number
+    spawns: number
+  }>
   player: Player
   cameraShake: number
   requestReplayCapture?: boolean
   comboGraceTimer?: number
+  powerTint: { r: number; g: number; b: number; alpha: number }
 }
 
 export interface HighScoreEntry {
@@ -113,6 +141,24 @@ export interface HighScoreEntry {
   score: number
   date: string
   placeholder?: boolean
+}
+
+export interface SpawnLogEntry {
+  beat: number
+  isSubBeat: boolean
+  intensity: number
+  drive: number
+  dynamics: number
+  patternBias: number
+  spawnChance: number
+  formationChance: number
+  spawnAccumulator: number
+  targetPerBeat: number
+  obstacleChance: number
+  beatsSinceEnemy: number
+  spawns: number
+  didSpawn: boolean
+  timestamp: number
 }
 
 export interface GameState {
@@ -151,6 +197,15 @@ export function createGameState(): GameState {
     replayVideoUrl: ref<string | null>(null),
     replayVisible: ref(false),
     replayPlaybackKey: ref(0),
+    celebrationVisible: ref(false),
+    celebrationTimer: ref(0),
+    celebrationMessage: ref(''),
+    celebrationTier: ref(0),
+    celebrationSubtitle: ref(''),
+    spawnLog: ref<SpawnLogEntry[]>([]),
+    paused: ref(false),
+    invincible: ref(false),
+    debugAudioSpawnView: ref(false),
   }
 
   const runtime: GameRuntime = {
@@ -198,6 +253,7 @@ export function createGameState(): GameState {
     slideElapsed: 0,
     slideTargetX: 0,
     flashTimer: 0,
+    flashColor: undefined,
     phaseActive: false,
     phaseTimer: 0,
     phaseModeIndex: 0,
@@ -212,6 +268,7 @@ export function createGameState(): GameState {
     lastBeatActionTime: 0,
     airComboMultiplier: 1,
     airComboStreak: 0,
+    airKillCombo: 0,
     slamOriginY: null,
     deathByEnemy: false,
     deathSlowTimer: 0,
@@ -221,6 +278,9 @@ export function createGameState(): GameState {
     replayRecorder: null,
     replayBuffer: [],
     replayStopTimeout: null,
+    spawnEvents: [],
+    spawnHistory: [],
+    spawnDebugTicks: [],
     player: {
       x: 0,
       y: 0,
@@ -232,6 +292,7 @@ export function createGameState(): GameState {
     cameraShake: 0,
     requestReplayCapture: false,
     comboGraceTimer: 0,
+    powerTint: { r: 0, g: 0, b: 0, alpha: 0 },
   }
 
   const editingKey = ref<string | null>(null)

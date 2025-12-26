@@ -3,6 +3,11 @@ import { clamp } from './physicsSystem'
 import type { GameRuntime, UiState } from '../core/gameState'
 import type { SfxName } from './audioEngine'
 
+export function registerAirKill(runtime: GameRuntime) {
+  if (runtime.player.onGround) return
+  runtime.airKillCombo += 1
+}
+
 export function triggerSquishBounce(runtime: GameRuntime, intensity = 1, playSfx?: (name: SfxName, loudness?: number) => void) {
   const airborneBefore = !runtime.player.onGround
   const bounceScale = Math.max(0.6, intensity)
@@ -99,6 +104,8 @@ export function applyBlastStrikes(
         alpha: 1,
         vy: -90,
       })
+
+      registerAirKill(runtime)
     }
   }
 
@@ -141,6 +148,7 @@ export function applySlideStrike(
         r: 0,
         alpha: 0.75,
       })
+      registerAirKill(runtime)
     }
   }
 }

@@ -274,13 +274,27 @@ export function drawPhaseOverlay(ctx: CanvasRenderingContext2D, runtime: GameRun
   }
 }
 
+export function drawPowerTint(ctx: CanvasRenderingContext2D, runtime: GameRuntime) {
+  const tint = runtime.powerTint
+  if (tint.alpha <= 0.001) return
+  ctx.save()
+  ctx.globalAlpha = tint.alpha
+  ctx.fillStyle = `rgb(${Math.round(tint.r)}, ${Math.round(tint.g)}, ${Math.round(tint.b)})`
+  ctx.fillRect(0, 0, runtime.width, runtime.height)
+  ctx.restore()
+}
+
 export function drawFlash(ctx: CanvasRenderingContext2D, runtime: GameRuntime) {
   if (runtime.flashTimer > 0) {
     ctx.save()
     const alpha = Math.max(0, Math.min(1, runtime.flashTimer / 0.14)) * 0.45
-    ctx.fillStyle = `rgba(250, 250, 255, ${alpha})`
+    const flashColor = runtime.flashColor ?? '250, 250, 255'
+    ctx.fillStyle = `rgba(${flashColor}, ${alpha})`
     ctx.fillRect(0, 0, runtime.width, runtime.height)
     ctx.restore()
     runtime.flashTimer = Math.max(0, runtime.flashTimer - (1 / 60))
+    if (runtime.flashTimer <= 0) {
+      runtime.flashColor = undefined
+    }
   }
 }

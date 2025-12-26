@@ -3,6 +3,7 @@
   <div class="app-root">
     <header class="app-header">
       <div class="title-wrap">
+        <div class="title-vignette-slot" aria-hidden="true"></div>
         <h1>HOPPY BLOCK</h1>
         <span class="title-glow"></span>
       </div>
@@ -37,11 +38,22 @@ import HoppyBlockGame from './components/HoppyBlockGame.vue'
 .title-wrap {
   position: relative;
   display: inline-block;
-  padding: 0.35rem 1.2rem;
+  padding: 0.35rem 1.2rem 0.35rem 12rem;
   border-radius: 0.9rem;
   background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(56, 189, 248, 0.14));
   border: 1px solid rgba(148, 163, 184, 0.35);
   box-shadow: 0 8px 28px rgba(34, 211, 238, 0.25);
+  overflow: visible;
+}
+
+.title-vignette-slot {
+  position: absolute;
+  left: 0.6rem;
+  bottom: -0.2rem;
+  width: 180px;
+  height: 64px;
+  pointer-events: none;
+  z-index: 2;
 }
 
 .title-wrap h1 {
@@ -79,5 +91,18 @@ import HoppyBlockGame from './components/HoppyBlockGame.vue'
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
+}
+
+@media (max-width: 640px) {
+  .title-wrap {
+    padding-left: 10.5rem;
+  }
+
+  .title-vignette-slot {
+    width: 150px;
+    height: 54px;
+    left: 0.4rem;
+    bottom: -0.15rem;
+  }
 }
 </style>

@@ -1,3 +1,5 @@
+import type { SpawnAttribution } from '../../debug/spawnCauses'
+
 export type EnemyType = 'gomba' | 'spiker' | 'floater'
 
 export interface Player {
@@ -32,6 +34,8 @@ export interface Enemy {
   squishImpulse?: number
   beatBob?: number
   dancePhase?: number
+  spawnAttribution?: SpawnAttribution
+  spawnTime?: number
 }
 
 export interface Obstacle {

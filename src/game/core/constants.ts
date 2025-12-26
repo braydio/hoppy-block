@@ -16,7 +16,6 @@ export const PHASE_DURATION = 10
 export const PHASE_COST = 20
 export const PHASE_COOLDOWN = 20
 export const DOUBLE_JUMP_COST = 10
-export const PARRY_COST = 6
 export const INTENSE_SLAM_HEIGHT = 180
 export const AIR_COMBO_STEP = 0.35
 export const AIR_COMBO_MAX = 3.2
@@ -92,9 +91,9 @@ export const PHASE_PALETTES = {
 }
 
 export const DIFFICULTY_PRESETS = {
-  easy: { speedMult: 0.9, spawnRate: 0.78, uniformity: 0.85 },
-  medium: { speedMult: 1, spawnRate: 1, uniformity: 0.45 },
-  hard: { speedMult: 1.15, spawnRate: 1.35, uniformity: 0.15 },
+  easy: { speedMult: 0.9, spawnRate: 0.6, uniformity: 0.88, spawnCapStart: 1, spawnCapMax: 2.2, spawnCapRampSeconds: 120 },
+  medium: { speedMult: 1, spawnRate: 0.85, uniformity: 0.5, spawnCapStart: 1, spawnCapMax: 2.6, spawnCapRampSeconds: 110 },
+  hard: { speedMult: 1.1, spawnRate: 1.1, uniformity: 0.22, spawnCapStart: 1.2, spawnCapMax: 3.2, spawnCapRampSeconds: 95 },
 }
 
 export const difficultyOptions = [
@@ -110,7 +109,8 @@ export const keybindOptions = [
   { id: 'slowmo', label: 'Slow-Mo' },
   { id: 'blast', label: 'Beat Blast' },
   { id: 'phase', label: 'Phase Shift' },
-  { id: 'parry', label: 'Beat Parry' },
+  { id: 'pause', label: 'Pause/Resume' },
+  { id: 'restart', label: 'Restart' },
 ] as const
 
 export const defaultKeybinds: Keybinds = {
@@ -120,5 +120,6 @@ export const defaultKeybinds: Keybinds = {
   slowmo: ['ArrowDown'],
   blast: ['ArrowRight'],
   phase: ['ArrowLeft'],
-  parry: ['KeyE'],
+  pause: ['KeyP'],
+  restart: ['Escape'],
 }

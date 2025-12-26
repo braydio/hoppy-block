@@ -127,7 +127,8 @@ export function drawHUD(
   ctx.restore()
 
   ctx.fillStyle = '#fcd34d'
-  ctx.fillText(`Combo X${Math.max(1, runtime.beatStreak)}`, bpmX, pad + 50)
+  ctx.fillText(`Combo x${Math.max(0, runtime.airKillCombo)}`, bpmX, pad + 50)
 
   ctx.restore()
+
 }
