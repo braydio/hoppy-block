@@ -1,3 +1,10 @@
+/**
+ * Audio engine for music-driven gameplay.
+ *
+ * Provides playback control, spectral analysis, beat-aligned metrics, and
+ * timeline cues derived from the loaded track so other systems can stay
+ * synchronized with musical structure.
+ */
 export type SfxName =
   | 'slam'
   | 'phase'
@@ -43,6 +50,8 @@ export function createAudioEngine() {
     beatIntensities: number[]
     maxIntensity: number
   } | null = null
+  let intensityWindows: IntensityWindow[] = []
+  let activeIntensityWindow: IntensityWindowState | null = null
   const audioTimeline: Array<{
     time: number
     bass: number
@@ -53,6 +62,10 @@ export function createAudioEngine() {
     loudnessDelta: number
   }> = []
   let debugTimelineEnabled = false
+
+  const windowListeners: Array<(window: IntensityWindowState | null) => void> = []
+
+  const clamp01 = (value: number) => Math.min(1, Math.max(0, value))
 
   async function configure(trackUrl: string, getArrayBuffer?: () => Promise<ArrayBuffer>) {
     audio?.pause()
@@ -107,8 +120,12 @@ export function createAudioEngine() {
       const decoded = await audioCtx.decodeAudioData(buf)
       bpm = detectBPMFromBuffer(decoded)
       levelMap = buildLevelMap(decoded, bpm)
+      intensityWindows = levelMap ? detectIntensityWindows(levelMap) : []
+      activeIntensityWindow = null
     } else {
       levelMap = null
+      intensityWindows = []
+      activeIntensityWindow = null
     }
 
     audioStarted = false
@@ -209,6 +226,54 @@ export function createAudioEngine() {
     }
   }
 
+  /**
+   * Update and return the current intensity window aligned to playback time.
+   *
+   * The active window is determined by comparing the playback position to
+   * precomputed intensity spans, including their lead-in padding. The window
+   * is memoized on the engine and listeners are notified when the window
+   * changes or clears.
+   *
+   * @param timeSeconds Current audio playback time in seconds.
+   * @returns The active intensity window state, or null when outside any window.
+   */
+  function updateIntensityWindow(timeSeconds: number) {
+    if (!levelMap || levelMap.duration <= 0 || intensityWindows.length === 0) {
+      if (activeIntensityWindow) {
+        activeIntensityWindow = null
+        windowListeners.forEach(listener => listener(null))
+      }
+      return null
+    }
+
+    const position = ((timeSeconds % levelMap.duration) + levelMap.duration) % levelMap.duration
+    const nextWindow = intensityWindows.find(win => position >= win.leadInStart && position <= win.end)
+
+    if (!nextWindow) {
+      if (activeIntensityWindow) {
+        activeIntensityWindow = null
+        windowListeners.forEach(listener => listener(null))
+      }
+      return null
+    }
+
+    const phase: IntensityWindowState['phase'] = position < nextWindow.start ? 'lead-in' : 'active'
+    const windowStart = phase === 'lead-in' ? nextWindow.leadInStart : nextWindow.start
+    const windowEnd = phase === 'lead-in' ? nextWindow.start : nextWindow.end
+    const progress = clamp01((position - windowStart) / Math.max(0.0001, windowEnd - windowStart))
+    const computed: IntensityWindowState = { ...nextWindow, phase, progress }
+
+    const changed =
+      !activeIntensityWindow ||
+      activeIntensityWindow.start !== computed.start ||
+      activeIntensityWindow.end !== computed.end ||
+      activeIntensityWindow.phase !== computed.phase
+
+    activeIntensityWindow = computed
+    if (changed) windowListeners.forEach(listener => listener(computed))
+    return computed
+  }
+
   function resetEnergy() {
     bassEnergy = 0
     midEnergy = 0
@@ -224,6 +289,7 @@ export function createAudioEngine() {
     intensityVar = 0
     bandMean = 0
     bandVar = 0
+    activeIntensityWindow = null
   }
 
   function applyPlaybackRate(rate: number) {
@@ -385,6 +451,64 @@ export function createAudioEngine() {
     }
   }
 
+  /**
+   * Compute sustained intensity windows from beat-normalized RMS values.
+   *
+   * The detector smooths beat intensities, derives a dynamic threshold using
+   * standard deviation, and then aggregates contiguous runs above that
+   * threshold into windows with configurable lead-in padding.
+   */
+  function detectIntensityWindows(map: LevelMap) {
+    const smoothed = smoothBeatIntensities(map.beatIntensities)
+    const mean = smoothed.reduce((acc, value) => acc + value, 0) / Math.max(1, smoothed.length)
+    const variance = smoothed.reduce((acc, value) => acc + Math.pow(value - mean, 2), 0) / Math.max(1, smoothed.length)
+    const std = Math.sqrt(Math.max(1e-6, variance))
+    const threshold = clamp01(mean + std * 0.45)
+    const minBeats = 4
+    const windows: IntensityWindow[] = []
+
+    let startIdx: number | null = null
+    for (let i = 0; i < smoothed.length; i += 1) {
+      const above = (smoothed[i] ?? 0) >= threshold
+      if (above && startIdx === null) startIdx = i
+      if ((!above || i === smoothed.length - 1) && startIdx !== null) {
+        const endIdx = above && i === smoothed.length - 1 ? i : i - 1
+        const span = endIdx - startIdx + 1
+        if (span >= minBeats) {
+          const start = startIdx * map.beatDuration
+          const end = (endIdx + 1) * map.beatDuration
+          const leadInStart = Math.max(0, start - map.beatDuration * 2.5)
+          const peak = smoothed.slice(startIdx, endIdx + 1).reduce((acc, value) => Math.max(acc, value), 0)
+          windows.push({ start, end, leadInStart, peak })
+        }
+        startIdx = null
+      }
+    }
+
+    return windows
+  }
+
+  /**
+   * Apply a small moving-average smoothing to beat intensities to reduce noise.
+   */
+  function smoothBeatIntensities(values: number[]) {
+    if (values.length === 0) return values
+    const radius = 1
+    const smoothed: number[] = []
+    for (let i = 0; i < values.length; i += 1) {
+      let sum = 0
+      let count = 0
+      for (let j = -radius; j <= radius; j += 1) {
+        const idx = i + j
+        if (idx < 0 || idx >= values.length) continue
+        sum += values[idx] ?? 0
+        count += 1
+      }
+      smoothed.push(sum / Math.max(1, count))
+    }
+    return smoothed
+  }
+
   return {
     configure,
     start,
@@ -395,6 +519,7 @@ export function createAudioEngine() {
     applyPlaybackRate,
     setSlapMix,
     playSfx,
+    updateIntensityWindow,
     get bpm() { return bpm },
     get started() { return audioStarted },
     get bass() { return bassEnergy },
@@ -411,9 +536,34 @@ export function createAudioEngine() {
     get audio() { return audio },
     get levelMap() { return levelMap },
     get audioTimeline() { return audioTimeline },
+    get intensityWindows() { return intensityWindows },
+    get intensityWindow() { return activeIntensityWindow },
+    onIntensityWindowChange(listener: (window: IntensityWindowState | null) => void) {
+      windowListeners.push(listener)
+    },
     setDebugTimelineEnabled(value: boolean) {
       debugTimelineEnabled = value
       if (!debugTimelineEnabled) audioTimeline.length = 0
     },
   }
+}
+
+interface LevelMap {
+  bpm: number
+  duration: number
+  beatDuration: number
+  beatIntensities: number[]
+  maxIntensity: number
+}
+
+export interface IntensityWindow {
+  start: number
+  end: number
+  leadInStart: number
+  peak: number
+}
+
+export interface IntensityWindowState extends IntensityWindow {
+  phase: 'lead-in' | 'active'
+  progress: number
 }

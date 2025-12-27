@@ -3,6 +3,7 @@ import type { Ref } from 'vue'
 import { defaultKeybinds, difficultyOptions, keybindOptions, PHASE_STATES } from './constants'
 import type { SpawnAttribution } from '../../debug/spawnCauses'
 import type { Enemy, Keybinds, Obstacle, Player } from './types'
+import type { IntensityWindowState } from '../systems/audioEngine'
 
 export interface UiState {
   score: Ref<number>
@@ -133,6 +134,7 @@ export interface GameRuntime {
   requestReplayCapture?: boolean
   comboGraceTimer?: number
   powerTint: { r: number; g: number; b: number; alpha: number }
+  intensityWindow: IntensityWindowState | null
 }
 
 export interface HighScoreEntry {
@@ -293,6 +295,7 @@ export function createGameState(): GameState {
     requestReplayCapture: false,
     comboGraceTimer: 0,
     powerTint: { r: 0, g: 0, b: 0, alpha: 0 },
+    intensityWindow: null,
   }
 
   const editingKey = ref<string | null>(null)
