@@ -1,9 +1,18 @@
+/**
+ * Base world rendering: sky gradient, parallax, ground, and beat line.
+ */
 import type { GameRuntime, UiState } from '../core/gameState'
 import type { Palette } from './types'
 import type { IntensityWindowState } from '../systems/audioEngine'
 
 /**
- * Render the world background and ground, tinted by rhythm cues and section windows.
+ * Paints the world background and ground, layering parallax stripes, beat markers,
+ * and subtle lead-in overlays when an intense section is approaching.
+ *
+ * @param ctx - Canvas rendering context.
+ * @param runtime - Current game runtime values.
+ * @param ui - Reactive UI state.
+ * @param palette - Active color palette.
  */
 export function drawWorld(
   ctx: CanvasRenderingContext2D,
@@ -39,8 +48,15 @@ export function drawWorld(
   ctx.restore()
 
   // Ground
-  ctx.fillStyle = palette.ground
+  const groundFill = runtime.intensityLeadInActive && palette.leadInGround ? palette.leadInGround : palette.ground
+  ctx.fillStyle = groundFill
   ctx.fillRect(0, runtime.groundY, runtime.width, runtime.height - runtime.groundY)
+  if (runtime.intensityLeadInActive) {
+    ctx.save()
+    ctx.fillStyle = palette.leadInOverlay ?? 'rgba(8, 47, 73, 0.22)'
+    ctx.fillRect(0, runtime.groundY - 24, runtime.width, Math.min(runtime.height - runtime.groundY + 36, runtime.height))
+    ctx.restore()
+  }
 
   // Beat line
   ctx.save()
