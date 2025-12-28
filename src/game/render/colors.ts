@@ -1,3 +1,7 @@
+/**
+ * Palette utilities for adapting colors based on energy, accessibility toggles,
+ * and active gameplay states such as phase modes.
+ */
 import { DEFAULT_PALETTE, PHASE_PALETTES } from '../core/constants'
 import type { UiState } from '../core/gameState'
 import type { GameRuntime } from '../core/gameState'
@@ -49,5 +53,7 @@ export function getPalette(runtime: GameRuntime, ui: UiState, pulse: number, int
       `hsl(${hue}, 65%, 16%)`,
       `hsl(${hue + 24}, 70%, 12%)`,
     ] as [string, string],
+    leadInGround: `hsl(${hue + 18}, 60%, 8%)`,
+    leadInOverlay: `rgba(${Math.min(255, r + 28)}, ${Math.min(255, g + 52)}, ${Math.min(255, b + 92)}, 0.25)`,
   }
 }

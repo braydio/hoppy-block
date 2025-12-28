@@ -1,3 +1,7 @@
+/**
+ * Core state containers for the runner, including reactive UI values and the mutable
+ * runtime that powers physics, audio sync, and spawns.
+ */
 import { reactive, ref } from 'vue'
 import type { Ref } from 'vue'
 import { defaultKeybinds, difficultyOptions, keybindOptions, PHASE_STATES } from './constants'
@@ -133,6 +137,10 @@ export interface GameRuntime {
   requestReplayCapture?: boolean
   comboGraceTimer?: number
   powerTint: { r: number; g: number; b: number; alpha: number }
+  intensityWindow: { start: number; end: number } | null
+  intensityLeadInActive: boolean
+  intensityPeakActive: boolean
+  airControlTightened: boolean
 }
 
 export interface HighScoreEntry {
@@ -168,6 +176,10 @@ export interface GameState {
   runtime: GameRuntime
 }
 
+/**
+ * Build the mutable game state containers used across the loop, including UI refs,
+ * keybinds, and runtime simulation values.
+ */
 export function createGameState(): GameState {
   const ui: UiState = {
     score: ref(0),
@@ -293,6 +305,10 @@ export function createGameState(): GameState {
     requestReplayCapture: false,
     comboGraceTimer: 0,
     powerTint: { r: 0, g: 0, b: 0, alpha: 0 },
+    intensityWindow: null,
+    intensityLeadInActive: false,
+    intensityPeakActive: false,
+    airControlTightened: false,
   }
 
   const editingKey = ref<string | null>(null)
