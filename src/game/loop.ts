@@ -354,6 +354,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.spawnEvents = []
     runtime.spawnHistory = []
     runtime.spawnDebugTicks = []
+    runtime.intensityWindow = null
     // Give players something to react to immediately.
     spawns.spawnObstacle({ nearStart: true })
     spawns.spawnEnemy('gomba')
@@ -702,6 +703,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     const beatPulseStrength = Math.sin(Math.min(beatPhase, 1) * Math.PI)
 
     audioEngine.updateEnergy()
+    runtime.intensityWindow = audioEngine.updateIntensityWindow(audioEngine.audio?.currentTime ?? 0)
     const intensity = audioEngine.intensity
     runtime.cameraShake = lerp(
       runtime.cameraShake,
@@ -1275,7 +1277,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     ctx.clearRect(0, 0, runtime.width, runtime.height)
 
     const pulse = 20 + audioEngine.bass * 80
-    const palette = getPalette(runtime, ui, pulse, audioEngine.intensity)
+    const palette = getPalette(runtime, ui, pulse, audioEngine.intensity, runtime.intensityWindow)
 
     ctx.save()
     if (runtime.cameraShake > 0.05) {
@@ -1285,7 +1287,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       )
     }
 
-    drawWorld(ctx, runtime, ui, palette)
+    drawWorld(ctx, runtime, ui, palette, runtime.intensityWindow)
     drawHatBursts(ctx, runtime, palette)
     drawDash(ctx, runtime)
     drawAudioVisualizer(ctx, runtime, palette)
@@ -1512,6 +1514,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     getLevelMapData: () => ({
       map: audioEngine.levelMap,
       currentTime: audioEngine.audio?.currentTime ?? 0,
+      intensityWindows: audioEngine.intensityWindows,
+      activeIntensityWindow: runtime.intensityWindow,
       spawnEvents: runtime.spawnEvents,
     }),
     getSpawnDebugData: () => ({

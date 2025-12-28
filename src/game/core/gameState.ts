@@ -7,6 +7,7 @@ import type { Ref } from 'vue'
 import { defaultKeybinds, difficultyOptions, keybindOptions, PHASE_STATES } from './constants'
 import type { SpawnAttribution } from '../../debug/spawnCauses'
 import type { Enemy, Keybinds, Obstacle, Player } from './types'
+import type { IntensityWindowState } from '../systems/audioEngine'
 
 export interface UiState {
   score: Ref<number>

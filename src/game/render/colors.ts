@@ -5,6 +5,7 @@
 import { DEFAULT_PALETTE, PHASE_PALETTES } from '../core/constants'
 import type { UiState } from '../core/gameState'
 import type { GameRuntime } from '../core/gameState'
+import type { IntensityWindowState } from '../systems/audioEngine'
 
 export function withAlpha(rgb: string, alpha: number) {
   if (rgb.startsWith('rgb(')) {
@@ -19,10 +20,31 @@ export function withAlpha(rgb: string, alpha: number) {
   return rgb
 }
 
-export function getPalette(runtime: GameRuntime, ui: UiState, pulse: number, intensity: number) {
+/**
+ * Build a palette tuned to the current gameplay and audio state.
+ *
+ * @param runtime Game runtime state for phase toggles and sizing.
+ * @param ui UI state for accessibility toggles.
+ * @param pulse Bass-driven color pulse amount.
+ * @param intensity Rolling audio intensity value.
+ * @param intensityWindow Active intensity window used to sync palette with mapped sections.
+ */
+export function getPalette(
+  runtime: GameRuntime,
+  ui: UiState,
+  pulse: number,
+  intensity: number,
+  intensityWindow: IntensityWindowState | null = null
+) {
   const energyHue = Math.round(20 + intensity * 120)
   const phaseHue = runtime.phaseActive ? 30 + runtime.phaseModeIndex * 40 : 0
-  const hue = energyHue + phaseHue
+  const sectionLift =
+    intensityWindow == null
+      ? 0
+      : intensityWindow.phase === 'lead-in'
+        ? intensityWindow.progress * 0.5
+        : 0.6 + intensityWindow.progress * 0.4
+  const hue = energyHue + phaseHue + sectionLift * 30
 
   const baseDefault = ui.colorblindMode.value
     ? {
@@ -48,10 +70,10 @@ export function getPalette(runtime: GameRuntime, ui: UiState, pulse: number, int
 
   return {
     ...base,
-    bg: `rgb(${r + pulse}, ${g}, ${b})`,
+    bg: `rgb(${r + pulse + sectionLift * 28}, ${g + sectionLift * 12}, ${b})`,
     skyStops: [
-      `hsl(${hue}, 65%, 16%)`,
-      `hsl(${hue + 24}, 70%, 12%)`,
+      `hsl(${hue}, ${65 + sectionLift * 12}%, ${16 + sectionLift * 10}%)`,
+      `hsl(${hue + 24}, ${70 + sectionLift * 8}%, ${12 + sectionLift * 10}%)`,
     ] as [string, string],
     leadInGround: `hsl(${hue + 18}, 60%, 8%)`,
     leadInOverlay: `rgba(${Math.min(255, r + 28)}, ${Math.min(255, g + 52)}, ${Math.min(255, b + 92)}, 0.25)`,

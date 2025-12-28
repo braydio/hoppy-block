@@ -714,6 +714,7 @@ function initCelebrationScene(width: number, height: number) {
     phaseMode: 'terrain',
     phaseModeIndex: 0,
     enemies: celebrationEnemies,
+    intensityWindow: null,
   } as GameRuntime
 }
 
@@ -798,7 +799,7 @@ function renderCelebrationClip(ctx: CanvasRenderingContext2D, width: number, hei
     }
   }
 
-  const palette = getPalette(runtime, ui, 0, 0.6)
+  const palette = getPalette(runtime, ui, 0, 0.6, null)
   const accent = { r: 56, g: 189, b: 248 }
   const accentAlt = { r: 236, g: 72, b: 153 }
   const accentColor = (a: number) => `rgba(${accent.r}, ${accent.g}, ${accent.b}, ${a})`
@@ -1023,6 +1024,7 @@ function initLiveScene(width: number, height: number) {
     phaseMode: 'terrain',
     phaseModeIndex: 0,
     enemies: liveEnemies,
+    intensityWindow: null,
   } as GameRuntime
 }
 
@@ -1069,7 +1071,7 @@ function renderLiveStatus(ctx: CanvasRenderingContext2D, width: number, height: 
     }
   }
 
-  const palette = getPalette(runtime, ui, 0, 0.4)
+  const palette = getPalette(runtime, ui, 0, 0.4, null)
   ctx.clearRect(0, 0, width, height)
   ctx.strokeStyle = 'rgba(226, 232, 240, 0.2)'
   ctx.lineWidth = 1
@@ -1118,6 +1120,7 @@ function initDeathScene(width: number, height: number) {
     phaseModeIndex: 0,
     enemies: [],
     playerFragments: [],
+    intensityWindow: null,
   } as GameRuntime
 }
 

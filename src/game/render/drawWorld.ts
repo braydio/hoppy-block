@@ -3,6 +3,7 @@
  */
 import type { GameRuntime, UiState } from '../core/gameState'
 import type { Palette } from './types'
+import type { IntensityWindowState } from '../systems/audioEngine'
 
 /**
  * Paints the world background and ground, layering parallax stripes, beat markers,
@@ -17,7 +18,8 @@ export function drawWorld(
   ctx: CanvasRenderingContext2D,
   runtime: GameRuntime,
   ui: UiState,
-  palette: Palette
+  palette: Palette,
+  intensityWindow: IntensityWindowState | null = null
 ) {
   // Sky gradient
   const skyGrad = ctx.createLinearGradient(0, 0, runtime.width, runtime.height * 0.6)
@@ -31,7 +33,13 @@ export function drawWorld(
 
   // Parallax stripes
   ctx.save()
-  ctx.globalAlpha = runtime.phaseActive ? 0.2 : 0.12
+  const windowGlow =
+    intensityWindow == null
+      ? 0
+      : intensityWindow.phase === 'lead-in'
+        ? 0.08 + intensityWindow.progress * 0.12
+        : 0.18 + intensityWindow.progress * 0.2
+  ctx.globalAlpha = runtime.phaseActive ? 0.2 : 0.12 + windowGlow
   ctx.fillStyle = palette.stripe
   const stripeHeight = 32
   for (let y = 0; y < runtime.height; y += stripeHeight) {
