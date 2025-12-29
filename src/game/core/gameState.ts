@@ -2,7 +2,7 @@ import { reactive, ref } from 'vue'
 import type { Ref } from 'vue'
 import { defaultKeybinds, difficultyOptions, keybindOptions, PHASE_STATES } from './constants'
 import type { SpawnAttribution } from '../../debug/spawnCauses'
-import type { Enemy, Keybinds, Obstacle, Player } from './types'
+import type { Enemy, GroundSegment, Keybinds, Obstacle, Player } from './types'
 import type { IntensityWindowState } from '../systems/audioEngine'
 
 export interface UiState {
@@ -78,6 +78,7 @@ export interface GameRuntime {
   hatBursts: any[]
   spawnBeacons: { x: number; y: number; alpha: number; band: 'bass' | 'mid' | 'high' }[]
   playerFragments: any[]
+  groundSegments: GroundSegment[]
   dashActive: boolean
   dashTimer: number
   dashVelocity: number
@@ -242,8 +243,9 @@ export function createGameState(): GameState {
   scorePops: [],
   sonicBursts: [],
   hatBursts: [],
-    spawnBeacons: [],
+  spawnBeacons: [],
   playerFragments: [],
+  groundSegments: [{ start: 0, end: 900 }],
     dashActive: false,
     dashTimer: 0,
     dashVelocity: 0,

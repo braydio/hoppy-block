@@ -1,5 +1,5 @@
 import { clamp, lerp } from './systems/physicsSystem'
-import { createSpawnSystem, applyDifficultySettings, getDifficultySettings } from './systems/spawnSystem'
+import { createSpawnSystem, applyDifficultySettings } from './systems/spawnSystem'
 import { isOnBeat, registerBeatAction } from './systems/beatSystem'
 import {
   ensureReplayRecorder,
@@ -50,6 +50,7 @@ import {
 import { drawPlayer } from './render/drawPlayer'
 import { drawEnemies } from './render/drawEnemies'
 import type { GameState } from './core/gameState'
+import type { GroundSegment } from './core/types'
 
 export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
   const { ui, keybinds, runtime } = state
@@ -152,6 +153,56 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     ui.charge.value = clamp(ui.charge.value - amount, 0, 100)
   }
 
+  /**
+   * Reset ground coverage to a continuous platform across the viewport.
+   */
+  function resetGroundSegments() {
+    runtime.groundSegments = [{ start: 0, end: runtime.width }]
+  }
+
+  /**
+   * Return the ground segment that currently supports the player, if any.
+   *
+   * @param x Player x position.
+   * @param width Player width.
+   * @returns Overlapping ground span or null when above a gap.
+   */
+  function getSupportingGroundSegment(x: number, width: number): GroundSegment | null {
+    return runtime.groundSegments.find(seg => x + width > seg.start && x < seg.end) ?? null
+  }
+
+  /**
+   * Recompute ground spans for the active intensity window, keeping quarter-beat spaced pads.
+   *
+   * @param windowState Active intensity window state.
+   */
+  function rebuildGroundSegments(windowState: typeof runtime.intensityWindow) {
+    const beatSeconds = 60 / Math.max(1, ui.bpm.value)
+    const quarterBeatSeconds = beatSeconds / 4
+    const spacing = Math.max(48, runtime.scrollSpeed * quarterBeatSeconds)
+
+    if (!windowState || windowState.phase !== 'active') {
+      resetGroundSegments()
+      return
+    }
+
+    const widthScale = 1.18 - windowState.progress * 0.78
+    const segmentWidth = Math.max(28, spacing * widthScale)
+    const segments: GroundSegment[] = []
+    const startOffset = -segmentWidth * 0.35
+
+    for (let x = startOffset; x < runtime.width + spacing; x += spacing) {
+      const segStart = Math.max(0, x)
+      const segEnd = Math.min(runtime.width, x + segmentWidth)
+      if (segEnd - segStart > 6) segments.push({ start: segStart, end: segEnd })
+    }
+
+    runtime.groundSegments = segments
+  }
+
+  /**
+   * Restore default runtime and UI values for a fresh session.
+   */
   function resetGame() {
     ui.score.value = 0
     ui.baseScore.value = 0
@@ -255,6 +306,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.spawnHistory = []
     runtime.spawnDebugTicks = []
     runtime.intensityWindow = null
+    resetGroundSegments()
     // Give players something to react to immediately.
     spawns.spawnObstacle({ nearStart: true })
     spawns.spawnEnemy('gomba')
@@ -467,6 +519,11 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     applyDifficultySettings(runtime, ui)
   }
 
+  /**
+   * Advance one simulation tick and apply beat-synced game logic.
+   *
+   * @param dtRaw Delta time in seconds since the previous frame.
+   */
   function update(dtRaw: number) {
     const dt = dtRaw
     ensureReplayRecorder(runtime)
@@ -762,7 +819,11 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
 
     const effectiveGravity = runtime.hangActive ? runtime.gravity * 0.035 : runtime.gravity
 
-    const lockSlideOnGround = runtime.slideActive && runtime.slideElapsed < (SLIDE_CROUCH_DURATION + SLIDE_DASH_DURATION)
+    runtime.scrollSpeed = runtime.baseScrollSpeed * ui.speed.value * timeScale
+    rebuildGroundSegments(runtime.intensityWindow)
+    const supportingGround = getSupportingGroundSegment(runtime.player.x, runtime.player.width)
+
+    const lockSlideOnGround = supportingGround && runtime.slideActive && runtime.slideElapsed < (SLIDE_CROUCH_DURATION + SLIDE_DASH_DURATION)
     if (!lockSlideOnGround) {
       runtime.player.vy += (runtime.isSlamming ? effectiveGravity * 2.5 : effectiveGravity) * dtRaw * timeScale
       runtime.player.y += runtime.player.vy * dtRaw * timeScale
@@ -770,8 +831,6 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       runtime.player.vy = 0
       runtime.player.y = runtime.groundY - runtime.player.height
     }
-
-    runtime.scrollSpeed = runtime.baseScrollSpeed * ui.speed.value * timeScale
 
     if (runtime.player.y < runtime.jumpApexY) {
       runtime.jumpApexY = runtime.player.y
@@ -976,7 +1035,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       }
     }
 
-    if (runtime.player.y + runtime.player.height >= runtime.groundY) {
+    if (supportingGround && runtime.player.y + runtime.player.height >= runtime.groundY) {
       const landingSlam = runtime.isSlamming
       const slamDepth = landingSlam ? runtime.groundY - (runtime.slamOriginY ?? runtime.groundY) : 0
       const intenseSlam = landingSlam && slamDepth > INTENSE_SLAM_HEIGHT
@@ -1037,6 +1096,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       runtime.isSlamming = false
       runtime.slamOriginY = null
       runtime.rotation = 0
+    } else if (!supportingGround) {
+      runtime.player.onGround = false
     }
 
     for (const o of runtime.obstacles) {

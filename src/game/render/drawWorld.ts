@@ -38,9 +38,11 @@ export function drawWorld(
   }
   ctx.restore()
 
-  // Ground
+  // Ground segments
   ctx.fillStyle = palette.ground
-  ctx.fillRect(0, runtime.groundY, runtime.width, runtime.height - runtime.groundY)
+  for (const segment of runtime.groundSegments) {
+    ctx.fillRect(segment.start, runtime.groundY, segment.end - segment.start, runtime.height - runtime.groundY)
+  }
 
   // Beat line
   ctx.save()
