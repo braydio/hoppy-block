@@ -47,6 +47,14 @@ export interface Obstacle {
   _destroy?: boolean
 }
 
+/**
+ * Horizontal ground coverage expressed as a screen-space span.
+ */
+export interface GroundSegment {
+  start: number
+  end: number
+}
+
 export interface Keybinds {
   [action: string]: string[]
 }
