@@ -1,3 +1,6 @@
+/**
+ * Shared color configuration for rendering the world and HUD layers.
+ */
 export interface Palette {
   stripe: string
   ground: string
@@ -11,4 +14,6 @@ export interface Palette {
   bgBase?: [number, number, number]
   bg: string
   skyStops?: [string, string]
+  leadInGround?: string
+  leadInOverlay?: string
 }

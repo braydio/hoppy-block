@@ -1,3 +1,7 @@
+/**
+ * Main game loop: orchestrates audio sync, input handling, physics updates, rendering,
+ * and spawn timing for the rhythm runner.
+ */
 import { clamp, lerp } from './systems/physicsSystem'
 import { createSpawnSystem, applyDifficultySettings } from './systems/spawnSystem'
 import { isOnBeat, registerBeatAction } from './systems/beatSystem'
@@ -58,6 +62,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
   const spawns = createSpawnSystem(runtime, ui)
   const { addBase, addBonus } = addScore(ui, runtime)
   let lastCelebrationStreak = 0
+  let baseGravity = runtime.gravity
+  let baseJumpVelocity = runtime.jumpVelocity
   const celebrationPools = {
     three: [
       'TRICKY!',
@@ -124,6 +130,96 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     'Banner‑wave velocity!',
     'Squire to spire!',
   ] as const
+  const leadInLookaheadSeconds = 10
+
+  /**
+   * Reset cached air-movement defaults to the current runtime baselines.
+   */
+  function refreshAirDefaults() {
+    baseGravity = runtime.gravity
+    baseJumpVelocity = runtime.jumpVelocity
+  }
+
+  /**
+   * Identify the highest-energy contiguous beat window in the level map so we can
+   * telegraph the upcoming intensity spike.
+   */
+  function deriveIntensityWindow() {
+    const map = audioEngine.levelMap
+    if (!map) {
+      runtime.intensityWindow = null
+      return null
+    }
+    const { beatIntensities, beatDuration } = map
+    const threshold = 0.68
+    let runStart = -1
+    let runSum = 0
+    let runCount = 0
+    let best: { start: number; end: number; avg: number } | null = null
+
+    const commitRun = (endIdx: number) => {
+      if (runStart < 0) return
+      const avg = runSum / Math.max(1, runCount)
+      if (!best || avg > best.avg || (avg === best.avg && endIdx - runStart > (best.end - best.start))) {
+        best = { start: runStart, end: endIdx, avg }
+      }
+    }
+
+    for (let i = 0; i < beatIntensities.length; i += 1) {
+      const intensity = beatIntensities[i] ?? 0
+      if (intensity >= threshold) {
+        if (runStart < 0) {
+          runStart = i
+          runSum = 0
+          runCount = 0
+        }
+        runSum += intensity
+        runCount += 1
+      } else if (runStart >= 0) {
+        commitRun(i)
+        runStart = -1
+      }
+    }
+    commitRun(beatIntensities.length)
+
+    if (best) {
+      runtime.intensityWindow = {
+        start: best.start * beatDuration,
+        end: best.end * beatDuration,
+      }
+      return runtime.intensityWindow
+    }
+    runtime.intensityWindow = null
+    return null
+  }
+
+  /**
+   * Tighten airtime so jumps land closer to a quarter-beat while approaching a peak.
+   *
+   * @param beatMs - Duration of a single beat in milliseconds.
+   */
+  function applyLeadInAirtime(beatMs: number) {
+    const targetDuration = clamp((beatMs / 4) / 1000, 0.08, 0.35)
+    const baseHeight = (Math.abs(baseJumpVelocity) * Math.abs(baseJumpVelocity)) / (2 * baseGravity)
+    const targetHeight = Math.max(40, baseHeight * 0.45)
+    const jumpMagnitude = (4 * targetHeight) / targetDuration
+    const gravityTarget = (8 * targetHeight) / (targetDuration * targetDuration)
+    const clampedGravity = clamp(gravityTarget, baseGravity * 1.8, baseGravity * 12)
+    const clampedJump = clamp(jumpMagnitude, Math.abs(baseJumpVelocity) * 0.4, Math.abs(baseJumpVelocity) * 2.4)
+
+    runtime.gravity = clampedGravity
+    runtime.jumpVelocity = -clampedJump
+    runtime.airControlTightened = true
+  }
+
+  /**
+   * Restore standard gravity and jump values after the intense window ends.
+   */
+  function restoreAirControl() {
+    runtime.gravity = baseGravity
+    runtime.jumpVelocity = baseJumpVelocity
+    runtime.airControlTightened = false
+  }
 
   function triggerCelebration(streak: number) {
     if (ui.gameOver.value) return
@@ -285,6 +381,10 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.slideTargetX = 0
     runtime.flashTimer = 0
     runtime.flashColor = undefined
+    runtime.intensityLeadInActive = false
+    runtime.intensityPeakActive = false
+    runtime.airControlTightened = false
+    refreshAirDefaults()
     ui.introCollapsing.value = false
     ui.started.value = false
     ui.canSaveScore.value = false
@@ -339,6 +439,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.freqData = audioEngine.freqData
     runtime.timeData = audioEngine.timeData
     ui.bpm.value = audioEngine.bpm
+    deriveIntensityWindow()
   }
 
   async function loadDefaultAudio() {
@@ -353,6 +454,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       runtime.freqData = audioEngine.freqData
       runtime.timeData = audioEngine.timeData
       ui.bpm.value = audioEngine.bpm
+      deriveIntensityWindow()
     } catch (err) {
       console.warn('Default track unavailable, waiting for user upload.', err)
     }
@@ -667,6 +769,24 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
         : 0,
       0.16
     )
+
+    const intensityWindow = runtime.intensityWindow
+    const audioTime = audioEngine.audio?.currentTime ?? null
+    let inLeadIn = false
+    let inPeak = false
+    if (intensityWindow && audioTime !== null && !ui.gameOver.value) {
+      const leadInStart = Math.max(0, intensityWindow.start - leadInLookaheadSeconds)
+      inLeadIn = audioTime >= leadInStart && audioTime < intensityWindow.start
+      inPeak = audioTime >= intensityWindow.start && audioTime <= intensityWindow.end
+    }
+    const shouldTightenAir = inLeadIn || inPeak
+    if (shouldTightenAir && !runtime.airControlTightened) {
+      applyLeadInAirtime(beatMs)
+    } else if (!shouldTightenAir && runtime.airControlTightened) {
+      restoreAirControl()
+    }
+    runtime.intensityLeadInActive = inLeadIn
+    runtime.intensityPeakActive = inPeak
 
     if (ui.started.value && !ui.gameOver.value && ui.beatPulse.value && audioEngine.highs > 0.6) {
       const count = 2 + Math.floor(audioEngine.highs * 3)

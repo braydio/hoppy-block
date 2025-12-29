@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: hoppyblock
+    env: static
+    plan: free
+    region: virginia
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
