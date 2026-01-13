@@ -1,3 +1,6 @@
+/**
+ * Shared type definitions for game entities, inputs, and runtime structures.
+ */
 import type { SpawnAttribution } from '../../debug/spawnCauses'
 
 export type EnemyType = 'gomba' | 'spiker' | 'floater'
@@ -48,11 +51,12 @@ export interface Obstacle {
 }
 
 /**
- * Horizontal ground coverage expressed as a screen-space span.
+ * Horizontal ground coverage expressed as a screen-space span with a vertical anchor.
  */
 export interface GroundSegment {
   start: number
   end: number
+  y: number
 }
 
 export interface Keybinds {

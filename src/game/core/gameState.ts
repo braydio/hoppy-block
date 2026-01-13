@@ -314,7 +314,7 @@ export function createGameState(): GameState {
     hatBursts: [],
     spawnBeacons: [],
     playerFragments: [],
-    groundSegments: [{ start: 0, end: 900 }],
+    groundSegments: [{ start: 0, end: 900, y: 340 }],
     groundMode: 'flat',
     dashActive: false,
     dashTimer: 0,

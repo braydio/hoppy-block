@@ -63,6 +63,34 @@ import { drawEnemies } from './render/drawEnemies'
 import type { GameState } from './core/gameState'
 import type { GroundSegment } from './core/types'
 
+const GROUND_ALIGN_EPSILON = 6
+
+/**
+ * Return the ground segment that currently supports the player, if any.
+ *
+ * @param segments Ground spans to scan.
+ * @param x Player x position.
+ * @param width Player width.
+ * @param playerBottomY Player bottom y position.
+ * @param epsilon Vertical alignment tolerance in pixels.
+ * @returns Overlapping ground span or null when above a gap.
+ */
+export function getSupportingGroundSegment(
+  segments: GroundSegment[],
+  x: number,
+  width: number,
+  playerBottomY: number,
+  epsilon = GROUND_ALIGN_EPSILON,
+): GroundSegment | null {
+  return (
+    segments.find((seg) => {
+      const overlapsHorizontally = x + width > seg.start && x < seg.end
+      const alignedVertically = Math.abs(playerBottomY - seg.y) < epsilon
+      return overlapsHorizontally && alignedVertically
+    }) ?? null
+  )
+}
+
 export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
   const { ui, keybinds, runtime } = state
   const audioEngine = createAudioEngine()
@@ -277,18 +305,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
    * Reset ground coverage to a continuous platform across the viewport.
    */
   function resetGroundSegments() {
-    runtime.groundSegments = [{ start: 0, end: runtime.width }]
-  }
-
-  /**
-   * Return the ground segment that currently supports the player, if any.
-   *
-   * @param x Player x position.
-   * @param width Player width.
-   * @returns Overlapping ground span or null when above a gap.
-   */
-  function getSupportingGroundSegment(x: number, width: number): GroundSegment | null {
-    return runtime.groundSegments.find((seg) => x + width > seg.start && x < seg.end) ?? null
+    runtime.groundSegments = [{ start: 0, end: runtime.width, y: runtime.groundY }]
   }
 
   /**
@@ -317,7 +334,9 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     for (let x = startOffset; x < runtime.width + spacing; x += spacing) {
       const segStart = Math.max(0, x)
       const segEnd = Math.min(runtime.width, x + segmentWidth)
-      if (segEnd - segStart > 6) segments.push({ start: segStart, end: segEnd })
+      if (segEnd - segStart > 6) {
+        segments.push({ start: segStart, end: segEnd, y: runtime.groundY })
+      }
     }
 
     runtime.groundSegments = segments
@@ -714,6 +733,18 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       ui.snapshotMessageTimer.value = Math.max(0, ui.snapshotMessageTimer.value - dtRaw)
     }
 
+    const slideGroundY = (() => {
+      if (runtime.groundMode !== 'segmented-y') return runtime.groundY
+      const playerBottomY = runtime.player.y + runtime.player.height
+      const supportingSegment = getSupportingGroundSegment(
+        runtime.groundSegments,
+        runtime.player.x,
+        runtime.player.width,
+        playerBottomY,
+      )
+      return supportingSegment?.y ?? runtime.groundY
+    })()
+
     if (runtime.slideActive) {
       runtime.slideTimer -= dtRaw
       runtime.slideElapsed += dtRaw
@@ -724,14 +755,14 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
 
       if (runtime.slideElapsed < crouchEnd) {
         runtime.player.x = runtime.slideStartX
-        runtime.player.y = runtime.groundY - runtime.player.height
+        runtime.player.y = slideGroundY - runtime.player.height
         runtime.player.vy = 0
         runtime.rotation = -0.25
       } else if (runtime.slideElapsed < dashEnd) {
         const t = clamp((runtime.slideElapsed - crouchEnd) / SLIDE_DASH_DURATION, 0, 1)
         const eased = 1 - Math.pow(1 - t, 3)
         runtime.player.x = lerp(runtime.slideStartX, runtime.slideTargetX, eased)
-        runtime.player.y = runtime.groundY - runtime.player.height
+        runtime.player.y = slideGroundY - runtime.player.height
         runtime.player.vy = 0
         runtime.rotation = 0.05
         applySlide()
@@ -739,14 +770,14 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
         const t = clamp((runtime.slideElapsed - dashEnd) / SLIDE_GLIDE_DURATION, 0, 1)
         const eased = 1 - Math.pow(t, 2)
         runtime.player.x = lerp(runtime.slideTargetX, runtime.slideTargetX - 18, 1 - eased)
-        runtime.player.y = runtime.groundY - runtime.player.height
+        runtime.player.y = slideGroundY - runtime.player.height
         runtime.rotation = -0.05
       } else if (runtime.slideElapsed < flipEnd) {
         const t = clamp((runtime.slideElapsed - glideEnd) / SLIDE_FLIP_DURATION, 0, 1)
         const backX = lerp(runtime.slideTargetX, runtime.slideStartX, t)
         const lift = Math.sin(t * Math.PI) * (runtime.player.height * 0.85)
         runtime.player.x = backX
-        runtime.player.y = runtime.groundY - runtime.player.height - lift
+        runtime.player.y = slideGroundY - runtime.player.height - lift
         if (!runtime.slideJumped) {
           runtime.player.vy = runtime.jumpVelocity * 0.28
           runtime.slideJumped = true
@@ -756,7 +787,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
         runtime.slideActive = false
         runtime.slideJumped = false
         runtime.player.x = runtime.slideStartX
-        runtime.player.y = runtime.groundY - runtime.player.height
+        runtime.player.y = slideGroundY - runtime.player.height
         runtime.player.vy = 0
         runtime.player.onGround = true
         runtime.rotation = 0
@@ -998,10 +1029,20 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
 
     runtime.scrollSpeed = runtime.baseScrollSpeed * ui.speed.value * timeScale
     rebuildGroundSegments(runtime.intensityWindow)
-    const supportingGround = getSupportingGroundSegment(runtime.player.x, runtime.player.width)
+    const playerBottomBeforeMove = runtime.player.y + runtime.player.height
+    const supportingGroundBeforeMove = getSupportingGroundSegment(
+      runtime.groundSegments,
+      runtime.player.x,
+      runtime.player.width,
+      playerBottomBeforeMove,
+    )
+    const snapGroundYBeforeMove =
+      runtime.groundMode === 'segmented-y' && supportingGroundBeforeMove
+        ? supportingGroundBeforeMove.y
+        : runtime.groundY
 
     const lockSlideOnGround =
-      supportingGround &&
+      supportingGroundBeforeMove &&
       runtime.slideActive &&
       runtime.slideElapsed < SLIDE_CROUCH_DURATION + SLIDE_DASH_DURATION
     if (!lockSlideOnGround) {
@@ -1010,7 +1051,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       runtime.player.y += runtime.player.vy * dtRaw * timeScale
     } else {
       runtime.player.vy = 0
-      runtime.player.y = runtime.groundY - runtime.player.height
+      runtime.player.y = snapGroundYBeforeMove - runtime.player.height
     }
 
     if (runtime.player.y < runtime.jumpApexY) {
@@ -1219,13 +1260,26 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       }
     }
 
-    if (supportingGround && runtime.player.y + runtime.player.height >= runtime.groundY) {
+    const playerBottomAfterMove = runtime.player.y + runtime.player.height
+    const supportingGround = getSupportingGroundSegment(
+      runtime.groundSegments,
+      runtime.player.x,
+      runtime.player.width,
+      playerBottomAfterMove,
+    )
+    const snapGroundYAfterMove =
+      runtime.groundMode === 'segmented-y' && supportingGround
+        ? supportingGround.y
+        : runtime.groundY
+    if (supportingGround && playerBottomAfterMove >= snapGroundYAfterMove) {
       const landingSlam = runtime.isSlamming
-      const slamDepth = landingSlam ? runtime.groundY - (runtime.slamOriginY ?? runtime.groundY) : 0
+      const slamDepth = landingSlam
+        ? snapGroundYAfterMove - (runtime.slamOriginY ?? snapGroundYAfterMove)
+        : 0
       const intenseSlam = landingSlam && slamDepth > INTENSE_SLAM_HEIGHT
       const slamPower = intenseSlam ? 1.4 : 1
 
-      runtime.player.y = runtime.groundY - runtime.player.height
+      runtime.player.y = snapGroundYAfterMove - runtime.player.height
       runtime.player.vy = 0
       runtime.player.onGround = true
       runtime.airKillCombo = 0
@@ -1238,7 +1292,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       if (landingSlam) {
         runtime.shockwaves.push({
           x: runtime.player.x + runtime.player.width / 2,
-          y: runtime.groundY,
+          y: snapGroundYAfterMove,
           w: 80 * slamPower,
           h: 10 + (intenseSlam ? 4 : 0),
           alpha: intenseSlam ? 0.45 : 0.32,
