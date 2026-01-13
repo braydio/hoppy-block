@@ -1,3 +1,6 @@
+/**
+ * Shared type definitions for core game entities and terrain metadata.
+ */
 import type { SpawnAttribution } from '../../debug/spawnCauses'
 
 export type EnemyType = 'gomba' | 'spiker' | 'floater'
@@ -51,8 +54,16 @@ export interface Obstacle {
  * Horizontal ground coverage expressed as a screen-space span.
  */
 export interface GroundSegment {
+  /** X start of the ground segment span. */
   start: number
+  /** X end of the ground segment span. */
   end: number
+  /** Y position for the segment surface. */
+  y: number
+  /** Index for the vertical level bucket used by segmented layouts. */
+  levelIndex: number
+  /** Whether the segment is currently safe to land on. */
+  safe: boolean
 }
 
 export interface Keybinds {

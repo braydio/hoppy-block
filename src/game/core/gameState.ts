@@ -239,6 +239,8 @@ export interface GameState {
  * keybinds, and runtime simulation values.
  */
 export function createGameState(): GameState {
+  const baseWidth = 900
+  const baseGroundY = 340
   const ui: UiState = {
     score: ref(0),
     baseScore: ref(0),
@@ -280,9 +282,9 @@ export function createGameState(): GameState {
 
   const runtime: GameRuntime = {
     ctx: null,
-    width: 900,
+    width: baseWidth,
     height: 400,
-    groundY: 340,
+    groundY: baseGroundY,
     gravity: 2600,
     jumpVelocity: -1050,
     baseScrollSpeed: 380,
@@ -314,7 +316,7 @@ export function createGameState(): GameState {
     hatBursts: [],
     spawnBeacons: [],
     playerFragments: [],
-    groundSegments: [{ start: 0, end: 900 }],
+    groundSegments: [{ start: 0, end: baseWidth, y: baseGroundY, levelIndex: 0, safe: true }],
     groundMode: 'flat',
     dashActive: false,
     dashTimer: 0,
