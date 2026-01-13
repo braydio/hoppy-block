@@ -169,10 +169,7 @@ export function drawAudioVisualizer(
   }
 }
 
-export function drawShockwaves(
-  ctx: CanvasRenderingContext2D,
-  runtime: GameRuntime,
-) {
+export function drawShockwaves(ctx: CanvasRenderingContext2D, runtime: GameRuntime) {
   for (const s of runtime.shockwaves) {
     ctx.save()
     ctx.globalAlpha = s.alpha * 0.65

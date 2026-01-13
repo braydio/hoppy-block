@@ -40,6 +40,7 @@ Rhythm runner where you surf the beat, jump gaps, and slam enemies for charge an
 - Upload your own track from the HUD; BPM is auto-detected and drives spawns/beat pulses.
 - A default track is provided if you skip the upload.
 - Adjust beat leniency with the Beat Window slider (ms) under Accessibility.
+- Safe ground lanes pulse on the beat during segmented terrain, while unsafe spans fade with a dashed texture for contrast.
 
 ## Difficulty & Accessibility
 - Difficulty buttons in the HUD tweak speed, spawn rate, and rhythm uniformity.
