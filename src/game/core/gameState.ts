@@ -86,6 +86,7 @@ export interface GameRuntime {
   spawnBeacons: { x: number; y: number; alpha: number; band: 'bass' | 'mid' | 'high' }[]
   playerFragments: any[]
   groundSegments: GroundSegment[]
+  groundMode: 'flat' | 'segmented-y'
   dashActive: boolean
   dashTimer: number
   dashVelocity: number
@@ -142,7 +143,7 @@ export interface GameRuntime {
   requestReplayCapture?: boolean
   comboGraceTimer?: number
   powerTint: { r: number; g: number; b: number; alpha: number }
-  intensityWindow: { start: number; end: number } | null
+  intensityWindow: IntensityWindowState | null
   intensityLeadInActive: boolean
   intensityPeakActive: boolean
   airControlTightened: boolean
@@ -258,13 +259,14 @@ export function createGameState(): GameState {
     nextJumpStyle: 'flip',
     obstacles: [],
     enemies: [],
-  shockwaves: [],
-  scorePops: [],
-  sonicBursts: [],
-  hatBursts: [],
-  spawnBeacons: [],
-  playerFragments: [],
-  groundSegments: [{ start: 0, end: 900 }],
+    shockwaves: [],
+    scorePops: [],
+    sonicBursts: [],
+    hatBursts: [],
+    spawnBeacons: [],
+    playerFragments: [],
+    groundSegments: [{ start: 0, end: 900 }],
+    groundMode: 'flat',
     dashActive: false,
     dashTimer: 0,
     dashVelocity: 0,
@@ -357,7 +359,7 @@ export function saveHighScore(ui: UiState, scoreValue: number) {
     date: new Date().toISOString().slice(0, 10),
   }
   const sorted = [...ui.highScores.value, entry].sort((a, b) => b.score - a.score)
-  const insertIdx = sorted.findIndex(e => e.id === entry.id)
+  const insertIdx = sorted.findIndex((e) => e.id === entry.id)
 
   const placeholder = { ...entry, id: `placeholder-${entry.id}`, placeholder: true }
   const withPlaceholder = [...sorted]
@@ -371,7 +373,7 @@ export function saveHighScore(ui: UiState, scoreValue: number) {
   setTimeout(() => {
     const finalList = sorted.slice(0, 10)
     ui.highScores.value = finalList
-    ui.lastSavedIndex.value = finalList.findIndex(e => e.id === entry.id)
+    ui.lastSavedIndex.value = finalList.findIndex((e) => e.id === entry.id)
     persistHighScores(ui)
     ui.savingHighScore.value = false
     ui.placeholderIndex.value = null

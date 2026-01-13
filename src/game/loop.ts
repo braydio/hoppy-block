@@ -11,7 +11,14 @@ import {
   stopReplayRecorder,
 } from './systems/replaySystem'
 import { createAudioEngine } from './systems/audioEngine'
-import { triggerSquishBounce, applyBlastStrikes, applySlideStrike, addScore, registerAirKill } from './systems/combatSystem'
+import type { IntensityWindowState } from './systems/audioEngine'
+import {
+  triggerSquishBounce,
+  applyBlastStrikes,
+  applySlideStrike,
+  addScore,
+  registerAirKill,
+} from './systems/combatSystem'
 import {
   DEFAULT_TRACK,
   DASH_WINDOW_MS,
@@ -142,7 +149,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
 
   /**
    * Identify the highest-energy contiguous beat window in the level map so we can
-   * telegraph the upcoming intensity spike.
+   * telegraph the upcoming intensity spike with a seeded lead-in window.
    */
   function deriveIntensityWindow() {
     const map = audioEngine.levelMap
@@ -155,13 +162,18 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     let runStart = -1
     let runSum = 0
     let runCount = 0
-    let best: { start: number; end: number; avg: number } | null = null
+    let runPeak = 0
+    let best: { start: number; end: number; avg: number; peak: number } | null = null
 
     const commitRun = (endIdx: number) => {
       if (runStart < 0) return
       const avg = runSum / Math.max(1, runCount)
-      if (!best || avg > best.avg || (avg === best.avg && endIdx - runStart > (best.end - best.start))) {
-        best = { start: runStart, end: endIdx, avg }
+      if (
+        !best ||
+        avg > best.avg ||
+        (avg === best.avg && endIdx - runStart > best.end - best.start)
+      ) {
+        best = { start: runStart, end: endIdx, avg, peak: runPeak }
       }
     }
 
@@ -172,9 +184,11 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
           runStart = i
           runSum = 0
           runCount = 0
+          runPeak = 0
         }
         runSum += intensity
         runCount += 1
+        runPeak = Math.max(runPeak, intensity)
       } else if (runStart >= 0) {
         commitRun(i)
         runStart = -1
@@ -183,9 +197,14 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     commitRun(beatIntensities.length)
 
     if (best) {
+      const leadInStart = Math.max(0, best.start * beatDuration - beatDuration * 2.5)
       runtime.intensityWindow = {
         start: best.start * beatDuration,
         end: best.end * beatDuration,
+        leadInStart,
+        peak: best.peak,
+        phase: 'lead-in',
+        progress: 0,
       }
       return runtime.intensityWindow
     }
@@ -199,13 +218,17 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
    * @param beatMs - Duration of a single beat in milliseconds.
    */
   function applyLeadInAirtime(beatMs: number) {
-    const targetDuration = clamp((beatMs / 4) / 1000, 0.08, 0.35)
+    const targetDuration = clamp(beatMs / 4 / 1000, 0.08, 0.35)
     const baseHeight = (Math.abs(baseJumpVelocity) * Math.abs(baseJumpVelocity)) / (2 * baseGravity)
     const targetHeight = Math.max(40, baseHeight * 0.45)
     const jumpMagnitude = (4 * targetHeight) / targetDuration
     const gravityTarget = (8 * targetHeight) / (targetDuration * targetDuration)
     const clampedGravity = clamp(gravityTarget, baseGravity * 1.8, baseGravity * 12)
-    const clampedJump = clamp(jumpMagnitude, Math.abs(baseJumpVelocity) * 0.4, Math.abs(baseJumpVelocity) * 2.4)
+    const clampedJump = clamp(
+      jumpMagnitude,
+      Math.abs(baseJumpVelocity) * 0.4,
+      Math.abs(baseJumpVelocity) * 2.4,
+    )
 
     runtime.gravity = clampedGravity
     runtime.jumpVelocity = -clampedJump
@@ -233,7 +256,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     else if (streak >= 4) tier = 4
     const pick = pool[Math.floor(Math.random() * pool.length)] ?? 'TRICKY!'
     ui.celebrationMessage.value = pick
-    ui.celebrationSubtitle.value = subtitlePool[Math.floor(Math.random() * subtitlePool.length)] ?? 'Feudal thrusters engaged!'
+    ui.celebrationSubtitle.value =
+      subtitlePool[Math.floor(Math.random() * subtitlePool.length)] ?? 'Feudal thrusters engaged!'
     ui.celebrationTier.value = tier
     ui.celebrationVisible.value = true
     ui.celebrationTimer.value = 2.8
@@ -264,20 +288,23 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
    * @returns Overlapping ground span or null when above a gap.
    */
   function getSupportingGroundSegment(x: number, width: number): GroundSegment | null {
-    return runtime.groundSegments.find(seg => x + width > seg.start && x < seg.end) ?? null
+    return runtime.groundSegments.find((seg) => x + width > seg.start && x < seg.end) ?? null
   }
 
   /**
    * Recompute ground spans for the active intensity window, keeping quarter-beat spaced pads.
    *
+   * Ground segmentation only applies while the runtime ground mode is set to
+   * segmented-y.
+   *
    * @param windowState Active intensity window state.
    */
-  function rebuildGroundSegments(windowState: typeof runtime.intensityWindow) {
+  function rebuildGroundSegments(windowState: IntensityWindowState | null) {
     const beatSeconds = 60 / Math.max(1, ui.bpm.value)
     const quarterBeatSeconds = beatSeconds / 4
     const spacing = Math.max(48, runtime.scrollSpeed * quarterBeatSeconds)
 
-    if (!windowState || windowState.phase !== 'active') {
+    if (runtime.groundMode !== 'segmented-y' || !windowState || windowState.phase !== 'active') {
       resetGroundSegments()
       return
     }
@@ -386,6 +413,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.intensityLeadInActive = false
     runtime.intensityPeakActive = false
     runtime.airControlTightened = false
+    runtime.groundMode = 'flat'
     refreshAirDefaults()
     ui.introCollapsing.value = false
     ui.started.value = false
@@ -425,7 +453,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     if (runtime.obstacleSpawnIntervalId) clearInterval(runtime.obstacleSpawnIntervalId)
     runtime.obstacleSpawnIntervalId = window.setInterval(() => {
       if (!ui.started.value || ui.gameOver.value || ui.paused.value) return
-      const hasNearRight = runtime.obstacles.some(o => runtime.width - o.x < 220)
+      const hasNearRight = runtime.obstacles.some((o) => runtime.width - o.x < 220)
       if (!hasNearRight) spawns.spawnObstacle()
     }, 1200)
   }
@@ -467,7 +495,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     const beatMs = 60000 / audioEngine.bpm
     const now = performance.now()
     const distToCurrent = Math.abs(now - runtime.lastBeatTime)
-    const distToNext = Math.abs((runtime.lastBeatTime + beatMs) - now)
+    const distToNext = Math.abs(runtime.lastBeatTime + beatMs - now)
     const dist = Math.min(distToCurrent, distToNext)
     if (dist < 80) {
       addCharge(4)
@@ -560,7 +588,10 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     const beatMs = 60000 / audioEngine.bpm
     const now = performance.now()
     const beatDist = runtime.lastBeatTime
-      ? Math.min(Math.abs(now - runtime.lastBeatTime), Math.abs(runtime.lastBeatTime + beatMs - now))
+      ? Math.min(
+          Math.abs(now - runtime.lastBeatTime),
+          Math.abs(runtime.lastBeatTime + beatMs - now),
+        )
       : Infinity
 
     const onTime = beatDist < DASH_WINDOW_MS
@@ -585,7 +616,6 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       registerBeatAction(runtime, false)
     }
   }
-
 
   function applyBlast() {
     applyBlastStrikes(runtime, addBonus, addCharge, audioEngine.playSfx)
@@ -639,11 +669,22 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     const prevGameOver = runtime.wasGameOver
     runtime.wasGameOver = ui.gameOver.value
     const beatDist = runtime.lastBeatTime
-      ? Math.min(Math.abs(now - runtime.lastBeatTime), Math.abs(runtime.lastBeatTime + beatMs - now))
+      ? Math.min(
+          Math.abs(now - runtime.lastBeatTime),
+          Math.abs(runtime.lastBeatTime + beatMs - now),
+        )
       : Infinity
 
-    ui.dashReady.value = !ui.gameOver.value && !runtime.dashActive && ui.charge.value >= DASH_COST && beatDist < DASH_WINDOW_MS
-    ui.phaseReady.value = !ui.gameOver.value && !runtime.phaseActive && ui.charge.value >= PHASE_COST && ui.phaseCooldown.value <= 0
+    ui.dashReady.value =
+      !ui.gameOver.value &&
+      !runtime.dashActive &&
+      ui.charge.value >= DASH_COST &&
+      beatDist < DASH_WINDOW_MS
+    ui.phaseReady.value =
+      !ui.gameOver.value &&
+      !runtime.phaseActive &&
+      ui.charge.value >= PHASE_COST &&
+      ui.phaseCooldown.value <= 0
 
     if (runtime.dashActive) {
       runtime.dashTimer -= dtRaw
@@ -771,10 +812,19 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       ui.started.value && !ui.gameOver.value
         ? (ui.beatPulse.value ? audioEngine.bass * 2 : 0) + intensity * 0.6
         : 0,
-      0.16
+      0.16,
     )
 
     const intensityWindow = runtime.intensityWindow
+    // Switch ground segmentation only once the active window has meaningfully started.
+    const shouldSegmentGround =
+      intensityWindow?.phase === 'active' && intensityWindow.progress >= 0.25
+    // TODO: Add unit coverage once the update loop is refactored for deterministic testing.
+    if (shouldSegmentGround && runtime.groundMode !== 'segmented-y') {
+      runtime.groundMode = 'segmented-y'
+    } else if (!shouldSegmentGround && runtime.groundMode !== 'flat') {
+      runtime.groundMode = 'flat'
+    }
     const audioTime = audioEngine.audio?.currentTime ?? null
     let inLeadIn = false
     let inPeak = false
@@ -841,13 +891,18 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     updatePowerTint(dtRaw)
 
     for (const e of runtime.enemies) {
-    e.squishImpulse = (e.squishImpulse || 0) * 0.86
-    e.beatBob = (e.beatBob || 0) * 0.82
-    const squashImpulse = e.squishImpulse || 0
+      e.squishImpulse = (e.squishImpulse || 0) * 0.86
+      e.beatBob = (e.beatBob || 0) * 0.82
+      const squashImpulse = e.squishImpulse || 0
       const beatBob = e.beatBob || 0
       e.dancePhase = (e.dancePhase || Math.random() * Math.PI * 2) + dt * 2.4
 
-      const bandEnergy = e.band === 'bass' ? audioEngine.bass : e.band === 'mid' ? audioEngine.mids : audioEngine.highs
+      const bandEnergy =
+        e.band === 'bass'
+          ? audioEngine.bass
+          : e.band === 'mid'
+            ? audioEngine.mids
+            : audioEngine.highs
       const groove = Math.sin(e.dancePhase) * 0.08
       const grooveBob = Math.cos(e.dancePhase) * 8 * bandEnergy
       const beatLift = beatPulseStrength * (bandEnergy * (e.band === 'bass' ? 14 : 10))
@@ -858,11 +913,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       e.bob = lerp(e.bob || 0, targetBob, 0.2)
 
       if (e.type === 'floater') {
-        e.rage = clamp(
-          (e.rage || 0) + intensity * 0.6 * dt - 0.15 * dt,
-          0,
-          1
-        )
+        e.rage = clamp((e.rage || 0) + intensity * 0.6 * dt - 0.15 * dt, 0, 1)
         if (e.rage > 0.6) {
           const dir = runtime.player.x - e.x
           e.x += Math.sign(dir) * 40 * dt * (0.5 + e.rage)
@@ -917,15 +968,17 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       }
     }
 
-    const baseGain = runtime.scrollSpeed * 0.02 * dt * (0.6 + intensity) * (runtime.slowActive ? 1.1 : 1)
+    const baseGain =
+      runtime.scrollSpeed * 0.02 * dt * (0.6 + intensity) * (runtime.slowActive ? 1.1 : 1)
     if (ui.started.value && !ui.gameOver.value) {
       addBase(baseGain)
     }
     const maxSpeed = 1.5
     const trackDuration = audioEngine.audio?.duration ?? 0
-    const trackProgress = trackDuration > 0
-      ? Math.max(0, Math.min(1, (audioEngine.audio?.currentTime ?? 0) / trackDuration))
-      : 1
+    const trackProgress =
+      trackDuration > 0
+        ? Math.max(0, Math.min(1, (audioEngine.audio?.currentTime ?? 0) / trackDuration))
+        : 1
     const speedCap = 1 + (maxSpeed - 1) * trackProgress
     const speedFactor = Math.min(speedCap, 1 + ui.score.value / 16000)
     ui.speed.value = speedFactor
@@ -947,9 +1000,13 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     rebuildGroundSegments(runtime.intensityWindow)
     const supportingGround = getSupportingGroundSegment(runtime.player.x, runtime.player.width)
 
-    const lockSlideOnGround = supportingGround && runtime.slideActive && runtime.slideElapsed < (SLIDE_CROUCH_DURATION + SLIDE_DASH_DURATION)
+    const lockSlideOnGround =
+      supportingGround &&
+      runtime.slideActive &&
+      runtime.slideElapsed < SLIDE_CROUCH_DURATION + SLIDE_DASH_DURATION
     if (!lockSlideOnGround) {
-      runtime.player.vy += (runtime.isSlamming ? effectiveGravity * 2.5 : effectiveGravity) * dtRaw * timeScale
+      runtime.player.vy +=
+        (runtime.isSlamming ? effectiveGravity * 2.5 : effectiveGravity) * dtRaw * timeScale
       runtime.player.y += runtime.player.vy * dtRaw * timeScale
     } else {
       runtime.player.vy = 0
@@ -967,7 +1024,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       }
       e.x -= runtime.scrollSpeed * 0.95 * dt
     }
-    runtime.enemies = runtime.enemies.filter(e => {
+    runtime.enemies = runtime.enemies.filter((e) => {
       if (e.squished) return (e.squishTimer || 0) > -0.2
       return e.x + e.width > 0 && e.alive
     })
@@ -975,10 +1032,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     for (const e of runtime.enemies) {
       if (e.squished) {
         e.squishTimer = (e.squishTimer || 0) - dt
-        e.currentHeight = Math.max(
-          e.pancakeHeight ?? 0,
-          (e.currentHeight ?? 0) - 220 * dt
-        )
+        e.currentHeight = Math.max(e.pancakeHeight ?? 0, (e.currentHeight ?? 0) - 220 * dt)
       }
     }
 
@@ -1020,23 +1074,23 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
             alpha: 0.8,
           })
 
-        runtime.scorePops.push({
-          x: e.x + e.width / 2,
-          y: e.y,
-          value: 280,
-          alpha: 1,
-          vy: -80,
-        })
-        registerAirKill(runtime)
-      } else if (e.type === 'gomba' && runtime.isSlamming && e.alive && !e.squished) {
-        e.squished = true
-        e.alive = false
-        e.squishTimer = 0.18
-        e.currentHeight = e.height
-        addBonus(250)
-        addCharge(12)
-        audioEngine.playSfx('enemyPop', 0.7)
-        triggerSquishBounce(runtime, 1, audioEngine.playSfx)
+          runtime.scorePops.push({
+            x: e.x + e.width / 2,
+            y: e.y,
+            value: 280,
+            alpha: 1,
+            vy: -80,
+          })
+          registerAirKill(runtime)
+        } else if (e.type === 'gomba' && runtime.isSlamming && e.alive && !e.squished) {
+          e.squished = true
+          e.alive = false
+          e.squishTimer = 0.18
+          e.currentHeight = e.height
+          addBonus(250)
+          addCharge(12)
+          audioEngine.playSfx('enemyPop', 0.7)
+          triggerSquishBounce(runtime, 1, audioEngine.playSfx)
 
           runtime.sonicBursts.push({
             x: e.x + e.width / 2,
@@ -1045,31 +1099,31 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
             alpha: 0.8,
           })
 
-        runtime.scorePops.push({
-          x: e.x + e.width / 2,
-          y: e.y,
-          value: 250,
-          alpha: 1,
-          vy: -80,
-        })
-        registerAirKill(runtime)
-      } else if (e.type === 'floater' && runtime.isSlamming && e.alive) {
-        const enraged = (e.rage ?? 0) > 0.85
-        if (!enraged || runtime.slowActive || runtime.hangActive) {
-          e.alive = false
-          addBonus(enraged ? 500 : 400)
-          addCharge(enraged ? 30 : 20)
-          audioEngine.playSfx('enemyPop', enraged ? 1 : 0.8)
-          triggerSquishBounce(runtime, 1.1, audioEngine.playSfx)
-
-          runtime.sonicBursts.push({
+          runtime.scorePops.push({
             x: e.x + e.width / 2,
-            y: e.y + e.height / 2,
-            r: 0,
-            alpha: 0.9,
+            y: e.y,
+            value: 250,
+            alpha: 1,
+            vy: -80,
           })
           registerAirKill(runtime)
-        } else {
+        } else if (e.type === 'floater' && runtime.isSlamming && e.alive) {
+          const enraged = (e.rage ?? 0) > 0.85
+          if (!enraged || runtime.slowActive || runtime.hangActive) {
+            e.alive = false
+            addBonus(enraged ? 500 : 400)
+            addCharge(enraged ? 30 : 20)
+            audioEngine.playSfx('enemyPop', enraged ? 1 : 0.8)
+            triggerSquishBounce(runtime, 1.1, audioEngine.playSfx)
+
+            runtime.sonicBursts.push({
+              x: e.x + e.width / 2,
+              y: e.y + e.height / 2,
+              r: 0,
+              alpha: 0.9,
+            })
+            registerAirKill(runtime)
+          } else {
             if (!ui.invincible.value) {
               ui.gameOver.value = true
               runtime.deathByEnemy = true
@@ -1104,9 +1158,9 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
 
       runtime.playerFragments.push(
         { x: cx, y: cy, vx: -220, vy: -260, size, alpha: 1 },
-        { x: cx, y: cy, vx: 220,  vy: -260, size, alpha: 1 },
-        { x: cx, y: cy, vx: -220, vy: 260,  size, alpha: 1 },
-        { x: cx, y: cy, vx: 220,  vy: 260,  size, alpha: 1 },
+        { x: cx, y: cy, vx: 220, vy: -260, size, alpha: 1 },
+        { x: cx, y: cy, vx: -220, vy: 260, size, alpha: 1 },
+        { x: cx, y: cy, vx: 220, vy: 260, size, alpha: 1 },
       )
     }
 
@@ -1135,7 +1189,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       p.y += p.vy * dt
       p.alpha -= 1.4 * dt
     }
-    runtime.scorePops = runtime.scorePops.filter(p => p.alpha > 0)
+    runtime.scorePops = runtime.scorePops.filter((p) => p.alpha > 0)
 
     for (const f of runtime.playerFragments) {
       f.x += f.vx * dt
@@ -1143,7 +1197,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       f.vy += 1800 * dt
       f.alpha -= 1.2 * dt
     }
-    runtime.playerFragments = runtime.playerFragments.filter(f => f.alpha > 0)
+    runtime.playerFragments = runtime.playerFragments.filter((f) => f.alpha > 0)
 
     if (runtime.requestReplayCapture) {
       runtime.requestReplayCapture = false
@@ -1234,16 +1288,16 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       o.x -= runtime.scrollSpeed * dt
     }
 
-    runtime.obstacles = runtime.obstacles.filter(o => o.x + o.width > 0 && !o._destroy)
+    runtime.obstacles = runtime.obstacles.filter((o) => o.x + o.width > 0 && !o._destroy)
 
     runtime.hatBursts = runtime.hatBursts
-      .map(p => ({
+      .map((p) => ({
         ...p,
         y: p.y + p.vy * dt,
         r: p.r * 0.985,
         alpha: p.alpha - dt * 0.9,
       }))
-      .filter(p => p.alpha > 0.05)
+      .filter((p) => p.alpha > 0.05)
 
     for (const o of runtime.obstacles) {
       const ox = o.x + pad
@@ -1252,7 +1306,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       const oh = o.height - pad * 2
 
       if (runtime.phaseActive && runtime.phaseMode === 'terrain') {
-        const overlaps = playerHitbox.x < ox + ow &&
+        const overlaps =
+          playerHitbox.x < ox + ow &&
           playerHitbox.x + playerHitbox.w > ox &&
           playerHitbox.y < oy + oh &&
           playerHitbox.y + playerHitbox.h > oy
@@ -1330,7 +1385,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       }
     }
 
-    runtime.obstacles = runtime.obstacles.filter(o => !o._destroy)
+    runtime.obstacles = runtime.obstacles.filter((o) => !o._destroy)
 
     if (!prevGameOver && ui.gameOver.value) {
       audioEngine.playSfx('death', 1)
@@ -1354,7 +1409,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     if (runtime.cameraShake > 0.05) {
       ctx.translate(
         (Math.random() - 0.5) * runtime.cameraShake,
-        (Math.random() - 0.5) * runtime.cameraShake
+        (Math.random() - 0.5) * runtime.cameraShake,
       )
     }
 
