@@ -16,7 +16,10 @@ type AudioEnergy = {
 }
 
 export function getDifficultySettings(ui: UiState) {
-  return DIFFICULTY_PRESETS[ui.difficulty.value as keyof typeof DIFFICULTY_PRESETS] || DIFFICULTY_PRESETS.medium
+  return (
+    DIFFICULTY_PRESETS[ui.difficulty.value as keyof typeof DIFFICULTY_PRESETS] ||
+    DIFFICULTY_PRESETS.medium
+  )
 }
 
 export function applyDifficultySettings(runtime: GameRuntime, ui: UiState) {
@@ -68,7 +71,7 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
     const top = Object.entries(patternCounts)
       .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
       .slice(0, 3)
-    const topSignatures = top.map(t => t[0])
+    const topSignatures = top.map((t) => t[0])
     const share = Math.min(1, (patternCounts[signature] || 0) / Math.max(1, patternTotal))
     const isTop = topSignatures.includes(signature)
     const bias = isTop ? 1.15 + share * 0.6 : 0.85
@@ -172,7 +175,7 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
       passed: false,
     }
 
-    const tooClose = runtime.obstacles.some(o => obstacle.x - (o.x + o.width) < minGap)
+    const tooClose = runtime.obstacles.some((o) => obstacle.x - (o.x + o.width) < minGap)
     if (!tooClose) {
       runtime.obstacles.push(obstacle)
       return 1
@@ -247,7 +250,7 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
         },
       },
     ]
-    const allowed = patterns.filter(p => p.count <= maxCount)
+    const allowed = patterns.filter((p) => p.count <= maxCount)
     if (allowed.length === 0) return 0
     const pool = intensity > 0.6 ? allowed.slice(1) : allowed
     const choice = pool[Math.floor(Math.random() * pool.length)] ?? allowed[0]
@@ -302,19 +305,28 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
     const projectedImpactBeat = runtime.beatIndex + beatsToImpact
     const beatsSinceEnemy = runtime.beatIndex - runtime.lastEnemySpawnBeat
     const beatsSinceObstacle = runtime.beatIndex - runtime.lastObstacleSpawnBeat
-    const forceSpawnGap = Math.max(1, (diff.uniformity ? 2.6 - diff.uniformity * 0.6 : 2.2) - spawnRate * 0.4)
+    const forceSpawnGap = Math.max(
+      1,
+      (diff.uniformity ? 2.6 - diff.uniformity * 0.6 : 2.2) - spawnRate * 0.4,
+    )
 
     const intensity = Math.max(0, Math.min(1, energy.intensity))
     const drive = Math.max(0, Math.min(1, energy.drive ?? intensity))
     const dynamics = Math.max(0, Math.min(1.2, Math.abs(energy.loudnessDelta ?? 0) * 3))
     const spawnNoise = (Math.random() - 0.5) * (1 - uniformity) * 0.5
-    const spawnChance = ((isSubBeat
-      ? 0.25 + intensity * 0.35
-      : 0.48 + intensity * 0.4) + spawnNoise) * (1 + dynamics * 0.7) * spawnRate * pattern.bias
+    const spawnChance =
+      ((isSubBeat ? 0.25 + intensity * 0.35 : 0.48 + intensity * 0.4) + spawnNoise) *
+      (1 + dynamics * 0.7) *
+      spawnRate *
+      pattern.bias
 
-    const formationChance = !isSubBeat && intensity > 0.35
-      ? (0.24 - uniformity * 0.06) * (1 + dynamics * 0.6) * spawnRate * (0.9 + pattern.bias * 0.25)
-      : 0
+    const formationChance =
+      !isSubBeat && intensity > 0.35
+        ? (0.24 - uniformity * 0.06) *
+          (1 + dynamics * 0.6) *
+          spawnRate *
+          (0.9 + pattern.bias * 0.25)
+        : 0
 
     const minBeatGapBase = isSubBeat ? 0.24 : 0.52
     const minBeatGapRaw = minBeatGapBase + uniformity * 0.16 - (1 - uniformity) * 0.06
@@ -323,7 +335,8 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
     const beaconBand = dominantBand
 
     function buildSpawnAttribution(): SpawnAttribution {
-      const bandValue = dominantBand === 'bass' ? energy.bass : dominantBand === 'mid' ? energy.mids : energy.highs
+      const bandValue =
+        dominantBand === 'bass' ? energy.bass : dominantBand === 'mid' ? energy.mids : energy.highs
       const causes: SpawnCause[] = [
         { kind: 'beat', beat: runtime.beatIndex },
         { kind: 'band', band: dominantBand, value: bandValue },
@@ -352,9 +365,8 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
       lastEnemyAudioSpawnTime = -Infinity
     }
 
-    const progress = duration > 0 && Number.isFinite(duration)
-      ? Math.max(0, Math.min(1, audioTime / duration))
-      : 0
+    const progress =
+      duration > 0 && Number.isFinite(duration) ? Math.max(0, Math.min(1, audioTime / duration)) : 0
 
     const capStart = diff.spawnCapStart ?? 1
     const capMax = diff.spawnCapMax ?? 3
@@ -380,8 +392,13 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
     const remainingCap = () => Math.floor(spawnCap - spawnsThisTick + 1e-6)
     if (!isSubBeat) {
       const basePerBeat = 0.25 + progress * 0.35
-      const driveMult = 0.6 + drive * 1.1 + dynamics * 0.25 + Math.max(0, (energy.driveDelta ?? 0) * 1.4)
-      targetPerBeat = basePerBeat * spawnRate * (0.9 + pattern.bias * 0.12) * Math.max(0.35, Math.min(1.8, driveMult))
+      const driveMult =
+        0.6 + drive * 1.1 + dynamics * 0.25 + Math.max(0, (energy.driveDelta ?? 0) * 1.4)
+      targetPerBeat =
+        basePerBeat *
+        spawnRate *
+        (0.9 + pattern.bias * 0.12) *
+        Math.max(0.35, Math.min(1.8, driveMult))
 
       spawnAccumulator = Math.min(4.5, spawnAccumulator + targetPerBeat)
       spawnAccumulator = Math.min(spawnAccumulator, Math.max(1, spawnCap))
@@ -410,7 +427,13 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
 
     const spawnedEnemyThisTick = spawnsThisTick > 0 || didSpawn
 
-    if (!spawnedEnemyThisTick && !isSubBeat && Math.random() < formationChance && beatsSinceEnemy >= minBeatGap + 0.2 && remainingCap() > 0) {
+    if (
+      !spawnedEnemyThisTick &&
+      !isSubBeat &&
+      Math.random() < formationChance &&
+      beatsSinceEnemy >= minBeatGap + 0.2 &&
+      remainingCap() > 0
+    ) {
       const remaining = remainingCap()
       let count = 0
       if (Math.random() < 0.55) {
@@ -424,13 +447,18 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
         spawnsThisTick += count
         enemySpawnsThisTick += count
       }
-    } else if (!spawnedEnemyThisTick && beatsSinceEnemy >= minBeatGap && Math.random() < spawnChance) {
+    } else if (
+      !spawnedEnemyThisTick &&
+      beatsSinceEnemy >= minBeatGap &&
+      Math.random() < spawnChance
+    ) {
       const remaining = remainingCap()
       const type = pickEnemyByEnergy(energy)
       if (type && remaining > 0) {
-        const count = (!isSubBeat && intensity > 0.6 && Math.random() < 0.25)
-          ? spawnTelegraphedEnemy(type, spawnX)
-          : spawnEnemy(type, spawnX)
+        const count =
+          !isSubBeat && intensity > 0.6 && Math.random() < 0.25
+            ? spawnTelegraphedEnemy(type, spawnX)
+            : spawnEnemy(type, spawnX)
         if (count > 0) {
           runtime.spawnBeacons.push({
             x: runtime.width + 60,
@@ -443,7 +471,12 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
           enemySpawnsThisTick += count
         }
       }
-    } else if (!spawnedEnemyThisTick && !isSubBeat && beatsSinceEnemy >= forceSpawnGap && remainingCap() > 0) {
+    } else if (
+      !spawnedEnemyThisTick &&
+      !isSubBeat &&
+      beatsSinceEnemy >= forceSpawnGap &&
+      remainingCap() > 0
+    ) {
       // Guarantee a spawn if RNG ran cold for too long.
       const count = spawnPattern(spawnX, intensity, remainingCap())
       if (count > 0) {
@@ -454,9 +487,15 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
     }
 
     const obstacleNoise = (Math.random() - 0.5) * (1 - uniformity) * 0.25
-    const obstacleChance = (0.2 + intensity * 0.36 + energy.highs * 0.22 + obstacleNoise) * spawnRate
+    const obstacleChance =
+      (0.2 + intensity * 0.36 + energy.highs * 0.22 + obstacleNoise) * spawnRate
     const minObstacleGap = 0.65 + uniformity * 0.22
-    if (!isSubBeat && beatsSinceObstacle >= minObstacleGap && Math.random() < obstacleChance && remainingCap() > 0) {
+    if (
+      !isSubBeat &&
+      beatsSinceObstacle >= minObstacleGap &&
+      Math.random() < obstacleChance &&
+      remainingCap() > 0
+    ) {
       spawnsThisTick += spawnObstacle()
       runtime.lastObstacleSpawnBeat = runtime.beatIndex
     }

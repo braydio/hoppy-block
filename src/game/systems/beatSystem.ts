@@ -2,12 +2,17 @@ import { clamp } from './physicsSystem'
 import type { GameRuntime, UiState } from '../core/gameState'
 import { MAX_MULTIPLIER } from '../core/constants'
 
-export function isOnBeat(runtime: GameRuntime, ui: UiState, audioStarted: boolean, windowMs: number = ui.beatWindowMs.value) {
+export function isOnBeat(
+  runtime: GameRuntime,
+  ui: UiState,
+  audioStarted: boolean,
+  windowMs: number = ui.beatWindowMs.value,
+) {
   if (!audioStarted) return false
   const beatMs = 60000 / ui.bpm.value
   const now = performance.now()
   const distToCurrent = Math.abs(now - runtime.lastBeatTime)
-  const distToNext = Math.abs((runtime.lastBeatTime + beatMs) - now)
+  const distToNext = Math.abs(runtime.lastBeatTime + beatMs - now)
   return Math.min(distToCurrent, distToNext) <= windowMs
 }
 

@@ -158,7 +158,9 @@ export function createAudioEngine() {
 
     ;(analyser as any).getByteFrequencyData(freq)
     ;(analyser as any).getByteTimeDomainData(time)
-    let bass = 0, mids = 0, highs = 0
+    let bass = 0,
+      mids = 0,
+      highs = 0
     for (let i = 0; i < 30; i++) bass += freq[i] ?? 0
     for (let i = 40; i < 120; i++) mids += freq[i] ?? 0
     for (let i = 140; i < 220; i++) highs += freq[i] ?? 0
@@ -241,18 +243,20 @@ export function createAudioEngine() {
     if (!levelMap || levelMap.duration <= 0 || intensityWindows.length === 0) {
       if (activeIntensityWindow) {
         activeIntensityWindow = null
-        windowListeners.forEach(listener => listener(null))
+        windowListeners.forEach((listener) => listener(null))
       }
       return null
     }
 
     const position = ((timeSeconds % levelMap.duration) + levelMap.duration) % levelMap.duration
-    const nextWindow = intensityWindows.find(win => position >= win.leadInStart && position <= win.end)
+    const nextWindow = intensityWindows.find(
+      (win) => position >= win.leadInStart && position <= win.end,
+    )
 
     if (!nextWindow) {
       if (activeIntensityWindow) {
         activeIntensityWindow = null
-        windowListeners.forEach(listener => listener(null))
+        windowListeners.forEach((listener) => listener(null))
       }
       return null
     }
@@ -270,7 +274,7 @@ export function createAudioEngine() {
       activeIntensityWindow.phase !== computed.phase
 
     activeIntensityWindow = computed
-    if (changed) windowListeners.forEach(listener => listener(computed))
+    if (changed) windowListeners.forEach((listener) => listener(computed))
     return computed
   }
 
@@ -329,7 +333,13 @@ export function createAudioEngine() {
       source.stop(now + duration)
     }
 
-    const playTone = (freqStart: number, freqEnd: number, duration: number, type: OscillatorType, gainMult = 1) => {
+    const playTone = (
+      freqStart: number,
+      freqEnd: number,
+      duration: number,
+      type: OscillatorType,
+      gainMult = 1,
+    ) => {
       const osc = ctx.createOscillator()
       const gain = ctx.createGain()
       osc.type = type
@@ -398,7 +408,7 @@ export function createAudioEngine() {
       intervals.push((current - prev) / sampleRate)
     }
 
-    const tempos = intervals.map(i => 60 / i)
+    const tempos = intervals.map((i) => 60 / i)
     const grouped: Record<string, number> = {}
 
     for (const t of tempos) {
@@ -461,7 +471,9 @@ export function createAudioEngine() {
   function detectIntensityWindows(map: LevelMap) {
     const smoothed = smoothBeatIntensities(map.beatIntensities)
     const mean = smoothed.reduce((acc, value) => acc + value, 0) / Math.max(1, smoothed.length)
-    const variance = smoothed.reduce((acc, value) => acc + Math.pow(value - mean, 2), 0) / Math.max(1, smoothed.length)
+    const variance =
+      smoothed.reduce((acc, value) => acc + Math.pow(value - mean, 2), 0) /
+      Math.max(1, smoothed.length)
     const std = Math.sqrt(Math.max(1e-6, variance))
     const threshold = clamp01(mean + std * 0.45)
     const minBeats = 4
@@ -478,7 +490,9 @@ export function createAudioEngine() {
           const start = startIdx * map.beatDuration
           const end = (endIdx + 1) * map.beatDuration
           const leadInStart = Math.max(0, start - map.beatDuration * 2.5)
-          const peak = smoothed.slice(startIdx, endIdx + 1).reduce((acc, value) => Math.max(acc, value), 0)
+          const peak = smoothed
+            .slice(startIdx, endIdx + 1)
+            .reduce((acc, value) => Math.max(acc, value), 0)
           windows.push({ start, end, leadInStart, peak })
         }
         startIdx = null
@@ -520,24 +534,60 @@ export function createAudioEngine() {
     setSlapMix,
     playSfx,
     updateIntensityWindow,
-    get bpm() { return bpm },
-    get started() { return audioStarted },
-    get bass() { return bassEnergy },
-    get mids() { return midEnergy },
-    get highs() { return highEnergy },
-    get intensity() { return intensity },
-    get loudness() { return loudness },
-    get loudnessDelta() { return loudnessDelta },
-    get drive() { return drive },
-    get driveDelta() { return driveDelta },
-    get analyser() { return analyser },
-    get freqData() { return freqData },
-    get timeData() { return timeData },
-    get audio() { return audio },
-    get levelMap() { return levelMap },
-    get audioTimeline() { return audioTimeline },
-    get intensityWindows() { return intensityWindows },
-    get intensityWindow() { return activeIntensityWindow },
+    get bpm() {
+      return bpm
+    },
+    get started() {
+      return audioStarted
+    },
+    get bass() {
+      return bassEnergy
+    },
+    get mids() {
+      return midEnergy
+    },
+    get highs() {
+      return highEnergy
+    },
+    get intensity() {
+      return intensity
+    },
+    get loudness() {
+      return loudness
+    },
+    get loudnessDelta() {
+      return loudnessDelta
+    },
+    get drive() {
+      return drive
+    },
+    get driveDelta() {
+      return driveDelta
+    },
+    get analyser() {
+      return analyser
+    },
+    get freqData() {
+      return freqData
+    },
+    get timeData() {
+      return timeData
+    },
+    get audio() {
+      return audio
+    },
+    get levelMap() {
+      return levelMap
+    },
+    get audioTimeline() {
+      return audioTimeline
+    },
+    get intensityWindows() {
+      return intensityWindows
+    },
+    get intensityWindow() {
+      return activeIntensityWindow
+    },
     onIntensityWindowChange(listener: (window: IntensityWindowState | null) => void) {
       windowListeners.push(listener)
     },

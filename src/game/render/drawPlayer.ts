@@ -3,11 +3,7 @@ import type { GameRuntime, UiState } from '../core/gameState'
 import type { Palette } from './types'
 import { clamp } from '../systems/physicsSystem'
 import { SLIDE_CROUCH_DURATION } from '../core/constants'
-import {
-  PlayerAnimationState,
-  getShakeOffset,
-  Easing
-} from './playerAnimation'
+import { PlayerAnimationState, getShakeOffset, Easing } from './playerAnimation'
 import { withAlpha } from './colors'
 
 /**
@@ -18,7 +14,7 @@ export function drawPlayer(
   runtime: GameRuntime,
   ui: UiState,
   palette: Palette,
-  anim?: PlayerAnimationState
+  anim?: PlayerAnimationState,
 ) {
   // Fallback for when animation state isn't provided
   if (!anim) {
@@ -80,7 +76,7 @@ function getStateColors(
   anim: PlayerAnimationState,
   runtime: GameRuntime,
   ui: UiState,
-  palette: Palette
+  palette: Palette,
 ): { bodyColor: string; glowColor: string; glowIntensity: number } {
   const baseColor = palette.player
 
@@ -89,38 +85,38 @@ function getStateColors(
       return {
         bodyColor: '#fb7185',
         glowColor: '#f472b6',
-        glowIntensity: 0.8 + Math.sin(anim.stateTime * 20) * 0.2
+        glowIntensity: 0.8 + Math.sin(anim.stateTime * 20) * 0.2,
       }
     case 'floating':
       return {
         bodyColor: withAlpha(baseColor, 0.9),
         glowColor: '#facc15',
-        glowIntensity: 0.5 + Math.sin(anim.stateTime * 5) * 0.3
+        glowIntensity: 0.5 + Math.sin(anim.stateTime * 5) * 0.3,
       }
     case 'slowmo':
       return {
         bodyColor: withAlpha(baseColor, 0.85),
         glowColor: '#38bdf8',
-        glowIntensity: 0.4
+        glowIntensity: 0.4,
       }
     case 'hurt':
       const flash = Math.sin(anim.stateTime * 30) > 0
       return {
         bodyColor: flash ? '#f97316' : baseColor,
         glowColor: '#f97316',
-        glowIntensity: flash ? 0.6 : 0.2
+        glowIntensity: flash ? 0.6 : 0.2,
       }
     case 'death':
       return {
         bodyColor: 'transparent',
         glowColor: '#f97316',
-        glowIntensity: 1 - anim.stateTime
+        glowIntensity: 1 - anim.stateTime,
       }
     default:
       return {
         bodyColor: baseColor,
         glowColor: palette.stroke,
-        glowIntensity: 0.3
+        glowIntensity: 0.3,
       }
   }
 }
@@ -158,7 +154,7 @@ function drawPlayerGlow(
   runtime: GameRuntime,
   color: string,
   intensity: number,
-  anim: PlayerAnimationState
+  anim: PlayerAnimationState,
 ): void {
   const w = runtime.player.width
   const h = runtime.player.height
@@ -187,7 +183,7 @@ function drawPlayerBody(
   runtime: GameRuntime,
   color: string,
   anim: PlayerAnimationState,
-  palette: Palette
+  palette: Palette,
 ): void {
   const w = runtime.player.width
   const h = runtime.player.height
@@ -222,8 +218,8 @@ function drawPlayerBody(
 
   // Canopy with state-reactive glow
   ctx.save()
-  const canopyGlow = anim.currentState === 'dashing' ? 0.9 :
-                     anim.currentState === 'floating' ? 0.8 : 0.7
+  const canopyGlow =
+    anim.currentState === 'dashing' ? 0.9 : anim.currentState === 'floating' ? 0.8 : 0.7
   ctx.fillStyle = `rgba(15, 23, 42, ${canopyGlow})`
   ctx.beginPath()
   ctx.moveTo(left + w * 0.32, top + h * 0.2)
@@ -272,7 +268,7 @@ function drawAnimatedDetails(
   ctx: CanvasRenderingContext2D,
   runtime: GameRuntime,
   anim: PlayerAnimationState,
-  palette: Palette
+  palette: Palette,
 ): void {
   const w = runtime.player.width
   const h = runtime.player.height
@@ -292,11 +288,12 @@ function drawAnimatedDetails(
 
   // Animated wings
   const wingBaseAngle = anim.wingAngle + anim.wingFlap
-  const wingColor = anim.currentState === 'dashing' ?
-    'rgba(251, 113, 133, 0.65)' :
-    anim.currentState === 'floating' ?
-    'rgba(250, 204, 21, 0.55)' :
-    'rgba(56, 189, 248, 0.55)'
+  const wingColor =
+    anim.currentState === 'dashing'
+      ? 'rgba(251, 113, 133, 0.65)'
+      : anim.currentState === 'floating'
+        ? 'rgba(250, 204, 21, 0.55)'
+        : 'rgba(56, 189, 248, 0.55)'
 
   const drawWing = (side: 'left' | 'right') => {
     const dir = side === 'left' ? -1 : 1
@@ -354,7 +351,7 @@ function drawThrusters(
   ctx: CanvasRenderingContext2D,
   runtime: GameRuntime,
   anim: PlayerAnimationState,
-  palette: Palette
+  palette: Palette,
 ): void {
   const w = runtime.player.width
   const h = runtime.player.height
@@ -406,14 +403,8 @@ function drawThrusters(
 
     ctx.beginPath()
     ctx.moveTo(0, -flameWidth / 2)
-    ctx.quadraticCurveTo(
-      -flameLength * 0.4, -flameWidth / 2 + wobble,
-      -flameLength, 0
-    )
-    ctx.quadraticCurveTo(
-      -flameLength * 0.4, flameWidth / 2 - wobble,
-      0, flameWidth / 2
-    )
+    ctx.quadraticCurveTo(-flameLength * 0.4, -flameWidth / 2 + wobble, -flameLength, 0)
+    ctx.quadraticCurveTo(-flameLength * 0.4, flameWidth / 2 - wobble, 0, flameWidth / 2)
     ctx.closePath()
     ctx.fill()
 
@@ -432,7 +423,7 @@ function drawThrusters(
 function drawInvulnShield(
   ctx: CanvasRenderingContext2D,
   runtime: GameRuntime,
-  anim: PlayerAnimationState
+  anim: PlayerAnimationState,
 ): void {
   ctx.save()
 
@@ -451,7 +442,7 @@ function drawInvulnShield(
   ctx.rotate(rotation)
 
   for (let i = 0; i < segments; i++) {
-    const angle = (Math.PI * 2 / segments) * i
+    const angle = ((Math.PI * 2) / segments) * i
     const segmentAlpha = alpha * (0.7 + 0.3 * Math.sin(anim.frameTime * 8 + i))
 
     ctx.save()
@@ -476,7 +467,7 @@ function drawInvulnShield(
 function drawDeathExplosion(
   ctx: CanvasRenderingContext2D,
   runtime: GameRuntime,
-  anim: PlayerAnimationState
+  anim: PlayerAnimationState,
 ): void {
   const centerX = runtime.player.x + runtime.player.width / 2
   const centerY = runtime.player.y + runtime.player.height / 2
@@ -544,17 +535,17 @@ function drawPlayerLegacy(
   ctx: CanvasRenderingContext2D,
   runtime: GameRuntime,
   ui: UiState,
-  palette: Palette
+  palette: Palette,
 ) {
   // ... your original drawPlayer code here for fallback
   const basePlayerColor = palette.player
   const playerColor = runtime.dashActive
     ? '#fb7185'
     : ui.gameOver.value && runtime.deathByEnemy
-    ? 'transparent'
-    : ui.gameOver.value
-    ? '#f97316'
-    : basePlayerColor
+      ? 'transparent'
+      : ui.gameOver.value
+        ? '#f97316'
+        : basePlayerColor
 
   const preppingDash = runtime.slideActive && runtime.slideElapsed < SLIDE_CROUCH_DURATION
   const prepT = preppingDash ? clamp(runtime.slideElapsed / SLIDE_CROUCH_DURATION, 0, 1) : 0
@@ -569,7 +560,7 @@ function drawPlayerLegacy(
   ctx.save()
   ctx.translate(
     runtime.player.x + runtime.player.width / 2,
-    runtime.player.y + runtime.player.height / 2
+    runtime.player.y + runtime.player.height / 2,
   )
   ctx.rotate(runtime.rotation)
   ctx.scale(playerSquishX, playerSquishY)
@@ -578,9 +569,7 @@ function drawPlayerLegacy(
     -runtime.player.width / 2,
     -runtime.player.height / 2,
     runtime.player.width,
-    runtime.player.height
+    runtime.player.height,
   )
   ctx.restore()
 }
-
-

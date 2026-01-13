@@ -1,4 +1,3 @@
-
 <template>
   <div class="game-shell">
     <Teleport v-if="titleVignetteReady" to=".title-vignette-slot">
@@ -10,7 +9,10 @@
           <span class="label">Score</span>
           <span class="value">{{ Math.floor(ui.score.value) }}</span>
         </div>
-        <span class="subvalue">Base {{ Math.floor(ui.baseScore.value) }} · Bonus {{ Math.floor(ui.bonusScore.value) }}</span>
+        <span class="subvalue"
+          >Base {{ Math.floor(ui.baseScore.value) }} · Bonus
+          {{ Math.floor(ui.bonusScore.value) }}</span
+        >
       </div>
       <div class="hud-item">
         <span class="label">Speed</span>
@@ -33,11 +35,7 @@
       <div class="hud-audio">
         <label class="audio-label">
           <span>Track</span>
-          <input
-            type="file"
-            accept="audio/*"
-            @change="handleAudioUpload"
-          />
+          <input type="file" accept="audio/*" @change="handleAudioUpload" />
         </label>
       </div>
       <div class="hud-item">
@@ -52,19 +50,15 @@
       </div>
     </div>
 
-    <div
-      class="game-frame"
-      :class="{ 'game-frame--beat': ui.beatPulse.value }"
-    >
+    <div class="game-frame" :class="{ 'game-frame--beat': ui.beatPulse.value }">
       <div v-if="ui.invincible.value" class="dev-badge">DEV INVINCIBLE</div>
       <canvas ref="canvas" class="game-canvas"></canvas>
 
-      <div
-        v-if="ui.snapshotMessageTimer.value > 0"
-        class="replay-toast"
-      >
+      <div v-if="ui.snapshotMessageTimer.value > 0" class="replay-toast">
         <div class="replay-title">{{ ui.celebrationMessage.value || 'TRICKY!' }}</div>
-        <div class="replay-sub">{{ ui.celebrationSubtitle.value || 'Feudal thrusters engaged!' }}</div>
+        <div class="replay-sub">
+          {{ ui.celebrationSubtitle.value || 'Feudal thrusters engaged!' }}
+        </div>
       </div>
 
       <div v-if="ui.gameOver.value" class="overlay">
@@ -79,13 +73,9 @@
               maxlength="16"
               placeholder="Your name"
             />
-            <button class="save-button" @click="handleSaveScore">
-              Save Score
-            </button>
+            <button class="save-button" @click="handleSaveScore">Save Score</button>
           </div>
-          <button class="restart-button" @click="handleRestart">
-            Restart
-          </button>
+          <button class="restart-button" @click="handleRestart">Restart</button>
           <p class="help">
             Press <kbd>{{ keyLabel(keybinds.restart) }}</kbd> to restart.
           </p>
@@ -95,7 +85,9 @@
       <div v-if="ui.paused.value && !ui.gameOver.value" class="overlay overlay--paused">
         <div class="overlay-card overlay-card--paused">
           <h2>Paused</h2>
-          <p>Press <kbd>{{ keyLabel(keybinds.pause) }}</kbd> or click Resume.</p>
+          <p>
+            Press <kbd>{{ keyLabel(keybinds.pause) }}</kbd> or click Resume.
+          </p>
         </div>
       </div>
 
@@ -111,22 +103,32 @@
         >
           <h2>Hoppy Block</h2>
 
-          <p><kbd>{{ keyLabel(keybinds.jump) }}</kbd> — Jump</p>
-          <p><kbd>{{ keyLabel(keybinds.slam) }}</kbd> — Slide / Slam</p>
-          <p><kbd>{{ keyLabel(keybinds.antigrav) }}</kbd> — Antigrav</p>
-          <p><kbd>{{ keyLabel(keybinds.slowmo) }}</kbd> — Slow-Mo</p>
-          <p><kbd>{{ keyLabel(keybinds.blast) }}</kbd> — Beat Blast</p>
-          <p><kbd>{{ keyLabel(keybinds.phase) }}</kbd> — Phase Shift</p>
+          <p>
+            <kbd>{{ keyLabel(keybinds.jump) }}</kbd> — Jump
+          </p>
+          <p>
+            <kbd>{{ keyLabel(keybinds.slam) }}</kbd> — Slide / Slam
+          </p>
+          <p>
+            <kbd>{{ keyLabel(keybinds.antigrav) }}</kbd> — Antigrav
+          </p>
+          <p>
+            <kbd>{{ keyLabel(keybinds.slowmo) }}</kbd> — Slow-Mo
+          </p>
+          <p>
+            <kbd>{{ keyLabel(keybinds.blast) }}</kbd> — Beat Blast
+          </p>
+          <p>
+            <kbd>{{ keyLabel(keybinds.phase) }}</kbd> — Phase Shift
+          </p>
 
-          <p class="help" style="margin-top: 0.6rem;">
-          Load a local mp3 file<br />
-          with the <strong><kbd>Track</kbd></strong> selector above <br />
-          to generate a custom level.
+          <p class="help" style="margin-top: 0.6rem">
+            Load a local mp3 file<br />
+            with the <strong><kbd>Track</kbd></strong> selector above <br />
+            to generate a custom level.
           </p>
         </div>
       </div>
-
-
     </div>
 
     <section class="levelmap-panel">
@@ -138,13 +140,7 @@
         <div class="levelmap-controls">
           <label>
             Zoom
-            <input
-              type="range"
-              min="0.5"
-              max="8"
-              step="0.1"
-              v-model.number="levelMapZoom"
-            />
+            <input type="range" min="0.5" max="8" step="0.1" v-model.number="levelMapZoom" />
           </label>
         </div>
       </header>
@@ -190,7 +186,8 @@
           <span>Actual spawns</span>
         </div>
         <p class="legend-note">
-          Top panel shows audio band energy; bottom panel shows intensity/drive/dynamics and target vs actual spawns.
+          Top panel shows audio band energy; bottom panel shows intensity/drive/dynamics and target
+          vs actual spawns.
         </p>
       </div>
       <canvas ref="spawnDebugCanvas" class="spawn-debug-canvas"></canvas>
@@ -276,11 +273,7 @@
         <p>Click a field, then press the key you want to use.</p>
       </header>
       <div class="keybinds-grid">
-        <div
-          v-for="action in keybindOptions"
-          :key="action.id"
-          class="keybind-row"
-        >
+        <div v-for="action in keybindOptions" :key="action.id" class="keybind-row">
           <span class="keybind-label">{{ action.label }}</span>
           <input
             class="keybind-input"
@@ -293,12 +286,7 @@
             @keydown.prevent="setKeybind(action.id, $event)"
             :placeholder="editingKey === action.id ? 'Press a key' : ''"
           />
-          <span
-            class="keybind-editing"
-            v-if="editingKey === action.id"
-          >
-            Listening…
-          </span>
+          <span class="keybind-editing" v-if="editingKey === action.id"> Listening… </span>
         </div>
       </div>
     </section>
@@ -320,13 +308,7 @@
         <label class="slider-row">
           <span>Beat window</span>
           <div class="slider-wrap">
-            <input
-              type="range"
-              min="40"
-              max="160"
-              step="5"
-              v-model.number="ui.beatWindowMs"
-            />
+            <input type="range" min="40" max="160" step="5" v-model.number="ui.beatWindowMs" />
             <span class="slider-value">{{ Math.round(ui.beatWindowMs.value) }} ms</span>
           </div>
         </label>
@@ -345,7 +327,8 @@
           class="score-row"
           :class="{
             'score-row--placeholder': entry.placeholder,
-            'score-row--new': ui.savedCurrentRun.value && !entry.placeholder && idx === ui.lastSavedIndex.value
+            'score-row--new':
+              ui.savedCurrentRun.value && !entry.placeholder && idx === ui.lastSavedIndex.value,
           }"
         >
           <span class="score-rank">#{{ idx + 1 }}</span>
@@ -361,11 +344,16 @@
   </div>
 </template>
 
-
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
-import { createGameState, loadHighScores, saveHighScore, difficultyOptions, keybindOptions } from '@/game/core/gameState'
+import {
+  createGameState,
+  loadHighScores,
+  saveHighScore,
+  difficultyOptions,
+  keybindOptions,
+} from '@/game/core/gameState'
 import { keyLabel } from '@/game/core/keybinds'
 import { createGameLoop } from '@/game/loop'
 import { createSpawnDebugView } from '@/debug/spawnDebugView'
@@ -403,7 +391,14 @@ const liveEnemies: Enemy[] = []
 let deathRuntime: GameRuntime | null = null
 let deathStart = 0
 let deathVariant = 0
-const deathFragments: Array<{ x: number; y: number; vx: number; vy: number; alpha: number; size: number }> = []
+const deathFragments: Array<{
+  x: number
+  y: number
+  vx: number
+  vy: number
+  alpha: number
+  size: number
+}> = []
 const spawnDebugCanvas = ref<HTMLCanvasElement | null>(null)
 let spawnDebugView: ReturnType<typeof createSpawnDebugView> | null = null
 let spawnDebugRaf: number | null = null
@@ -490,7 +485,10 @@ function startLevelMap() {
 
     const containerWidth = levelMapScroll.value?.clientWidth ?? 600
     const basePixelsPerSecond = 60
-    const width = Math.max(containerWidth, mapData.map.duration * basePixelsPerSecond * levelMapZoom.value)
+    const width = Math.max(
+      containerWidth,
+      mapData.map.duration * basePixelsPerSecond * levelMapZoom.value,
+    )
     const height = 120
     if (canvasEl.width !== Math.floor(width)) canvasEl.width = Math.floor(width)
     if (canvasEl.height !== height) canvasEl.height = height
@@ -509,7 +507,8 @@ function startLevelMap() {
       const x = i * beatPx
       const barHeight = 16 + intensity * 52
       const y = height - barHeight - 18
-      const color = intensity > highlightThreshold ? 'rgba(248, 113, 113, 0.8)' : 'rgba(56, 189, 248, 0.55)'
+      const color =
+        intensity > highlightThreshold ? 'rgba(248, 113, 113, 0.8)' : 'rgba(56, 189, 248, 0.55)'
       ctx.fillStyle = color
       ctx.fillRect(x, y, beatPx, barHeight)
 
@@ -605,7 +604,10 @@ function startLevelMap() {
       if (now - lastLevelMapScroll > 1200) {
         const rightEdge = scrollEl.scrollLeft + containerWidth
         if (playheadXRaw > rightEdge - 2) {
-          const target = Math.min(scrollEl.scrollLeft + containerWidth, canvasEl.width - containerWidth)
+          const target = Math.min(
+            scrollEl.scrollLeft + containerWidth,
+            canvasEl.width - containerWidth,
+          )
           scrollEl.scrollLeft = Math.max(0, target)
         }
       }
@@ -685,7 +687,7 @@ function initCelebrationScene(width: number, height: number) {
       bob: 0,
       phase: 0,
       rage: 0,
-    }
+    },
   )
   for (let i = 0; i < celebrationEnemies.length; i += 1) {
     celebrationPinState.push({ vx: 0, vy: 0, spin: 0 })
@@ -909,7 +911,8 @@ function startSpawnDebugView() {
     spawnDebugRaf = requestAnimationFrame(draw)
     if (!ui.debugAudioSpawnView.value) {
       const ctx = spawnDebugCanvas.value?.getContext('2d')
-      if (ctx) ctx.clearRect(0, 0, spawnDebugCanvas.value?.width ?? 0, spawnDebugCanvas.value?.height ?? 0)
+      if (ctx)
+        ctx.clearRect(0, 0, spawnDebugCanvas.value?.width ?? 0, spawnDebugCanvas.value?.height ?? 0)
       return
     }
     const data = game?.getSpawnDebugData()
@@ -936,31 +939,31 @@ function stopSpawnDebugView() {
 
 watch(
   () => ui.debugAudioSpawnView.value,
-  async enabled => {
+  async (enabled) => {
     if (!enabled) {
       stopSpawnDebugView()
       return
     }
     await nextTick()
     startSpawnDebugView()
-  }
+  },
 )
 
 watch(
   () => statusCanvas.value,
-  value => {
+  (value) => {
     if (!value) return
     if (statusRaf) cancelAnimationFrame(statusRaf)
     startStatusScreen()
-  }
+  },
 )
 
 watch(
   () => spawnDebugCanvas.value,
-  value => {
+  (value) => {
     if (!value || !ui.debugAudioSpawnView.value) return
     startSpawnDebugView()
-  }
+  },
 )
 
 function initLiveScene(width: number, height: number) {
@@ -999,7 +1002,7 @@ function initLiveScene(width: number, height: number) {
       confident: true,
       spikes: true,
       concerned: false,
-    }
+    },
   )
   liveRuntime = {
     width,
@@ -1041,7 +1044,8 @@ function renderLiveStatus(ctx: CanvasRenderingContext2D, width: number, height: 
   statusLastTime = now
 
   const hopPhase = (now * 0.0025) % 1
-  const hopHeight = hopPhase < 0.5 ? Math.sin(hopPhase * Math.PI) * 14 : Math.sin((1 - hopPhase) * Math.PI) * 6
+  const hopHeight =
+    hopPhase < 0.5 ? Math.sin(hopPhase * Math.PI) * 14 : Math.sin((1 - hopPhase) * Math.PI) * 6
 
   runtime.player.x = 16
   runtime.player.y = runtime.groundY - runtime.player.height - hopHeight
@@ -1280,7 +1284,7 @@ function drawFireShape(
   width: number,
   height: number,
   outerColor: string,
-  innerColor: string
+  innerColor: string,
 ) {
   ctx.fillStyle = outerColor
   ctx.beginPath()
@@ -1295,8 +1299,22 @@ function drawFireShape(
   ctx.fillStyle = innerColor
   ctx.beginPath()
   ctx.moveTo(0, -height * 0.2)
-  ctx.bezierCurveTo(-innerWidth * 0.25, -innerHeight * 0.35, -innerWidth * 0.35, -innerHeight, 0, -innerHeight)
-  ctx.bezierCurveTo(innerWidth * 0.35, -innerHeight, innerWidth * 0.25, -innerHeight * 0.35, 0, -height * 0.2)
+  ctx.bezierCurveTo(
+    -innerWidth * 0.25,
+    -innerHeight * 0.35,
+    -innerWidth * 0.35,
+    -innerHeight,
+    0,
+    -innerHeight,
+  )
+  ctx.bezierCurveTo(
+    innerWidth * 0.35,
+    -innerHeight,
+    innerWidth * 0.25,
+    -innerHeight * 0.35,
+    0,
+    -height * 0.2,
+  )
   ctx.closePath()
   ctx.fill()
   const highlightColor = 'rgba(255, 255, 255, 0.45)'
@@ -1309,7 +1327,7 @@ function drawFlameTongue(
   width: number,
   height: number,
   offsetX: number,
-  color: string
+  color: string,
 ) {
   ctx.fillStyle = color
   ctx.beginPath()
@@ -1326,7 +1344,7 @@ function drawDeathGomba(
   y: number,
   radius: number,
   rotation: number,
-  alpha: number
+  alpha: number,
 ) {
   ctx.save()
   ctx.translate(x, y)
@@ -1398,7 +1416,15 @@ function drawDeathExplosion(ctx: CanvasRenderingContext2D, x: number, y: number,
     ctx.globalAlpha = (1 - progress) * 0.9
     ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
     ctx.beginPath()
-    ctx.ellipse(x + Math.cos(angle) * length, y + Math.sin(angle) * length, 3, 1.5, angle, 0, Math.PI * 2)
+    ctx.ellipse(
+      x + Math.cos(angle) * length,
+      y + Math.sin(angle) * length,
+      3,
+      1.5,
+      angle,
+      0,
+      Math.PI * 2,
+    )
     ctx.fill()
   }
 
@@ -1424,7 +1450,7 @@ function drawDeathSmokeCloud(
   x: number,
   y: number,
   progress: number,
-  fade: number
+  fade: number,
 ) {
   if (progress <= 0 || fade <= 0) return
   const radius = 20 + progress * 60
@@ -1454,7 +1480,7 @@ function drawDeathSmokeCloud(
       puffRadius * 0.5,
       angle * 0.4,
       0,
-      Math.PI * 2
+      Math.PI * 2,
     )
     ctx.fill()
   }
@@ -1521,7 +1547,6 @@ function handleSpawnDebugPointerDown(event: PointerEvent) {
 function handleSpawnDebugPointerLeave() {
   spawnDebugView?.onPointerLeave()
 }
-
 </script>
 
 <style scoped>
@@ -1558,7 +1583,6 @@ function handleSpawnDebugPointerLeave() {
   font-size: 0.65rem;
   color: #94a3b8;
 }
-
 
 .hud-audio {
   margin-top: 0.25rem;
@@ -1689,7 +1713,9 @@ function handleSpawnDebugPointerLeave() {
   background: radial-gradient(circle at top left, #0f172a 0, #020617 60%);
   border: 1px solid rgba(148, 163, 184, 0.4);
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.85);
-  transition: box-shadow 120ms ease-out, transform 120ms ease-out;
+  transition:
+    box-shadow 120ms ease-out,
+    transform 120ms ease-out;
   width: 100%;
   max-width: 960px;
 }
@@ -1885,7 +1911,7 @@ function handleSpawnDebugPointerLeave() {
   gap: 0.5rem;
 }
 
-.levelmap-controls input[type="range"] {
+.levelmap-controls input[type='range'] {
   width: 160px;
 }
 
@@ -2049,14 +2075,27 @@ function handleSpawnDebugPointerLeave() {
 }
 
 @keyframes collapse-beat {
-  0% { transform: scale(1) translateY(0); opacity: 1; }
-  50% { transform: scale(1.05) translateY(-6px); opacity: 0.8; }
-  100% { transform: scale(0.15) translateY(-40px); opacity: 0; }
+  0% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05) translateY(-6px);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(0.15) translateY(-40px);
+    opacity: 0;
+  }
 }
 
 @keyframes overlay-fade {
-  0% { opacity: 1; }
-  100% { opacity: 0; }
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 .overlay-card h2 {
@@ -2101,8 +2140,14 @@ function handleSpawnDebugPointerLeave() {
 }
 
 @keyframes toast-pop {
-  from { transform: translate(-50%, -10px) scale(0.98); opacity: 0; }
-  to { transform: translate(-50%, 0) scale(1); opacity: 1; }
+  from {
+    transform: translate(-50%, -10px) scale(0.98);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0) scale(1);
+    opacity: 1;
+  }
 }
 
 .score-save {
@@ -2347,7 +2392,9 @@ kbd {
 }
 
 .score-row--new {
-  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35), 0 10px 24px rgba(56, 189, 248, 0.2);
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.35),
+    0 10px 24px rgba(56, 189, 248, 0.2);
   animation: pulse-new 0.6s ease-in-out 1;
 }
 
@@ -2356,9 +2403,17 @@ kbd {
 }
 
 @keyframes pulse-new {
-  0% { transform: translateY(-6px) scale(1.02); opacity: 0; }
-  40% { transform: translateY(0) scale(1.01); opacity: 1; }
-  100% { transform: translateY(0) scale(1); }
+  0% {
+    transform: translateY(-6px) scale(1.02);
+    opacity: 0;
+  }
+  40% {
+    transform: translateY(0) scale(1.01);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
 }
 
 .score-rank {

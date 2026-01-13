@@ -65,7 +65,7 @@ export type PlayerState =
   | 'floating'
   | 'slowmo'
   | 'hurt'
-  | 'death';
+  | 'death'
 
 export interface TrailParticle {
   x: number
@@ -114,7 +114,7 @@ export function createAnimationState(): PlayerAnimationState {
 export const Easing = {
   easeInQuad: (t: number) => t * t,
   easeOutQuad: (t: number) => t * (2 - t),
-  easeInOutQuad: (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
+  easeInOutQuad: (t: number) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t),
   easeOutBack: (t: number) => {
     const c1 = 1.70158
     const c3 = c1 + 1
@@ -122,8 +122,7 @@ export const Easing = {
   },
   easeOutElastic: (t: number) => {
     const c4 = (2 * Math.PI) / 3
-    return t === 0 ? 0 : t === 1 ? 1
-      : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1
+    return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1
   },
   easeOutBounce: (t: number) => {
     const n1 = 7.5625
@@ -132,7 +131,7 @@ export const Easing = {
     if (t < 2 / d1) return n1 * (t -= 1.5 / d1) * t + 0.75
     if (t < 2.5 / d1) return n1 * (t -= 2.25 / d1) * t + 0.9375
     return n1 * (t -= 2.625 / d1) * t + 0.984375
-  }
+  },
 }
 
 /**
@@ -155,7 +154,8 @@ export function determinePlayerState(runtime: GameRuntime): PlayerState {
 
   // Dash states
   if (runtime.dashActive) return 'dashing'
-  if (runtime.slideActive && runtime.slideElapsed < SLIDE_CROUCH_DURATION) return 'dash_anticipation'
+  if (runtime.slideActive && runtime.slideElapsed < SLIDE_CROUCH_DURATION)
+    return 'dash_anticipation'
   if (runtime.slideActive) return 'sliding'
 
   // Antigrav/float
@@ -183,7 +183,7 @@ export function determinePlayerState(runtime: GameRuntime): PlayerState {
 export function updateAnimationState(
   anim: PlayerAnimationState,
   runtime: GameRuntime,
-  dt: number
+  dt: number,
 ): void {
   anim.frameTime += dt
 
@@ -229,7 +229,7 @@ export function updateAnimationState(
   // Landing recovery
   if (anim.landingRecoveryTime > 0) {
     anim.landingRecoveryTime -= dt
-    const t = 1 - (anim.landingRecoveryTime / 0.2)
+    const t = 1 - anim.landingRecoveryTime / 0.2
     anim.landingSquash = Easing.easeOutElastic(t) * 0.15
   }
 }
@@ -394,26 +394,34 @@ function updateTrailParticles(anim: PlayerAnimationState, runtime: GameRuntime, 
       life: 0.3 + Math.random() * 0.2,
       maxLife: 0.5,
       size: 3 + Math.random() * 4,
-      color: colors[Math.floor(Math.random() * colors.length)]
+      color: colors[Math.floor(Math.random() * colors.length)],
     })
   }
 }
 
 function getTrailSpawnRate(state: PlayerState): number {
   switch (state) {
-    case 'dashing': return 3
-    case 'jumping': return 1
-    case 'floating': return 0.5
-    default: return 0.2
+    case 'dashing':
+      return 3
+    case 'jumping':
+      return 1
+    case 'floating':
+      return 0.5
+    default:
+      return 0.2
   }
 }
 
 function getTrailColors(state: PlayerState): string[] {
   switch (state) {
-    case 'dashing': return ['#fb7185', '#f472b6', '#fda4af']
-    case 'floating': return ['#facc15', '#fef08a', '#fef9c3']
-    case 'jumping': return ['#22d3ee', '#67e8f9', '#a5f3fc']
-    default: return ['#94a3b8', '#cbd5e1', '#e2e8f0']
+    case 'dashing':
+      return ['#fb7185', '#f472b6', '#fda4af']
+    case 'floating':
+      return ['#facc15', '#fef08a', '#fef9c3']
+    case 'jumping':
+      return ['#22d3ee', '#67e8f9', '#a5f3fc']
+    default:
+      return ['#94a3b8', '#cbd5e1', '#e2e8f0']
   }
 }
 
@@ -426,6 +434,6 @@ export function getShakeOffset(anim: PlayerAnimationState): { x: number; y: numb
   const intensity = anim.impactShake * 8
   return {
     x: Math.sin(anim.frameTime * 80 + anim.impactDirection) * intensity,
-    y: Math.cos(anim.frameTime * 80 + anim.impactDirection * 0.7) * intensity
+    y: Math.cos(anim.frameTime * 80 + anim.impactDirection * 0.7) * intensity,
   }
 }

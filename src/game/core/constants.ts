@@ -91,9 +91,30 @@ export const PHASE_PALETTES = {
 }
 
 export const DIFFICULTY_PRESETS = {
-  easy: { speedMult: 0.9, spawnRate: 0.6, uniformity: 0.88, spawnCapStart: 1, spawnCapMax: 2.2, spawnCapRampSeconds: 120 },
-  medium: { speedMult: 1, spawnRate: 0.85, uniformity: 0.5, spawnCapStart: 1, spawnCapMax: 2.6, spawnCapRampSeconds: 110 },
-  hard: { speedMult: 1.1, spawnRate: 1.1, uniformity: 0.22, spawnCapStart: 1.2, spawnCapMax: 3.2, spawnCapRampSeconds: 95 },
+  easy: {
+    speedMult: 0.9,
+    spawnRate: 0.6,
+    uniformity: 0.88,
+    spawnCapStart: 1,
+    spawnCapMax: 2.2,
+    spawnCapRampSeconds: 120,
+  },
+  medium: {
+    speedMult: 1,
+    spawnRate: 0.85,
+    uniformity: 0.5,
+    spawnCapStart: 1,
+    spawnCapMax: 2.6,
+    spawnCapRampSeconds: 110,
+  },
+  hard: {
+    speedMult: 1.1,
+    spawnRate: 1.1,
+    uniformity: 0.22,
+    spawnCapStart: 1.2,
+    spawnCapMax: 3.2,
+    spawnCapRampSeconds: 95,
+  },
 }
 
 export const difficultyOptions = [

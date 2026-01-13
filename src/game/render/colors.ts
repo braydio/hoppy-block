@@ -34,7 +34,7 @@ export function getPalette(
   ui: UiState,
   pulse: number,
   intensity: number,
-  intensityWindow: IntensityWindowState | null = null
+  intensityWindow: IntensityWindowState | null = null,
 ) {
   const energyHue = Math.round(20 + intensity * 120)
   const phaseHue = runtime.phaseActive ? 30 + runtime.phaseModeIndex * 40 : 0
@@ -60,7 +60,8 @@ export function getPalette(
     : DEFAULT_PALETTE
   const basePhase = ui.colorblindMode.value
     ? {
-        ...PHASE_PALETTES[runtime.phaseMode as keyof typeof PHASE_PALETTES] || PHASE_PALETTES.terrain,
+        ...(PHASE_PALETTES[runtime.phaseMode as keyof typeof PHASE_PALETTES] ||
+          PHASE_PALETTES.terrain),
         beat: '#fbbf24',
       }
     : PHASE_PALETTES[runtime.phaseMode as keyof typeof PHASE_PALETTES] || PHASE_PALETTES.terrain

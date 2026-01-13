@@ -13,7 +13,7 @@ export function drawHUD(
   runtime: GameRuntime,
   ui: UiState,
   keybinds: Keybinds,
-  audio: AudioView
+  audio: AudioView,
 ) {
   const pad = 14
 
@@ -83,9 +83,11 @@ export function drawHUD(
   const beatY = pad + 16
   const beatMs = 60000 / Math.max(1, ui.bpm.value)
   const nearestEnemy = runtime.enemies
-    .filter(e => e.alive && !e.squished && e.x + e.width > runtime.player.x)
+    .filter((e) => e.alive && !e.squished && e.x + e.width > runtime.player.x)
     .sort((a, b) => a.x - b.x)[0]
-  const indicatorX = nearestEnemy ? nearestEnemy.x + nearestEnemy.width / 2 : runtime.width - pad - 20
+  const indicatorX = nearestEnemy
+    ? nearestEnemy.x + nearestEnemy.width / 2
+    : runtime.width - pad - 20
   const beatPhase = Math.min(1, (performance.now() - runtime.lastBeatTime) / beatMs)
   const cycle = (runtime.beatIndex % 4) as 0 | 1 | 2 | 3
   const colors = [
@@ -130,5 +132,4 @@ export function drawHUD(
   ctx.fillText(`Combo x${Math.max(0, runtime.airKillCombo)}`, bpmX, pad + 50)
 
   ctx.restore()
-
 }

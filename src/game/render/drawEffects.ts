@@ -3,7 +3,11 @@ import { withAlpha } from './colors'
 import type { Palette } from './types'
 import { DEFAULT_PALETTE } from '../core/constants'
 
-export function drawHatBursts(ctx: CanvasRenderingContext2D, runtime: GameRuntime, palette: Palette) {
+export function drawHatBursts(
+  ctx: CanvasRenderingContext2D,
+  runtime: GameRuntime,
+  palette: Palette,
+) {
   for (const p of runtime.hatBursts) {
     ctx.save()
     ctx.globalAlpha = p.alpha
@@ -62,13 +66,13 @@ export function drawDash(ctx: CanvasRenderingContext2D, runtime: GameRuntime) {
     ctx.restore()
     g.alpha *= 0.92
   }
-  runtime.dashGhosts = runtime.dashGhosts.filter(g => g.alpha > 0.05)
+  runtime.dashGhosts = runtime.dashGhosts.filter((g) => g.alpha > 0.05)
 }
 
 export function drawAudioVisualizer(
   ctx: CanvasRenderingContext2D,
   runtime: GameRuntime,
-  palette: Palette
+  palette: Palette,
 ) {
   if (!runtime.analyser || !runtime.freqData || !runtime.timeData) return
 
@@ -97,7 +101,14 @@ export function drawAudioVisualizer(
   // Background wash that reacts to RMS surges/drops for more dynamic visuals
   ctx.save()
   ctx.globalAlpha = surgeAlpha + dropAlpha
-  const g = ctx.createRadialGradient(runtime.width * 0.7, runtime.groundY, 80, runtime.width * 0.3, runtime.height * 0.2, 420)
+  const g = ctx.createRadialGradient(
+    runtime.width * 0.7,
+    runtime.groundY,
+    80,
+    runtime.width * 0.3,
+    runtime.height * 0.2,
+    420,
+  )
   g.addColorStop(0, withAlpha(palette.visWave, 0.28 + surgeAlpha))
   g.addColorStop(1, withAlpha(palette.visBar, 0.05 + dropAlpha))
   ctx.fillStyle = g
@@ -109,12 +120,7 @@ export function drawAudioVisualizer(
     const barHeight = v * 110
 
     ctx.fillStyle = withAlpha(palette.visBar, v * 0.6 + surgeAlpha * 0.4)
-    ctx.fillRect(
-      i * barWidth,
-      runtime.groundY - barHeight + 6,
-      barWidth - 3,
-      barHeight
-    )
+    ctx.fillRect(i * barWidth, runtime.groundY - barHeight + 6, barWidth - 3, barHeight)
   }
 
   ctx.save()
@@ -162,7 +168,11 @@ export function drawAudioVisualizer(
   }
 }
 
-export function drawShockwaves(ctx: CanvasRenderingContext2D, runtime: GameRuntime, palette: Palette) {
+export function drawShockwaves(
+  ctx: CanvasRenderingContext2D,
+  runtime: GameRuntime,
+  palette: Palette,
+) {
   for (const s of runtime.shockwaves) {
     ctx.save()
     ctx.globalAlpha = s.alpha * 0.65
@@ -215,7 +225,11 @@ export function drawScorePops(ctx: CanvasRenderingContext2D, runtime: GameRuntim
   }
 }
 
-export function drawObstacles(ctx: CanvasRenderingContext2D, runtime: GameRuntime, palette: Palette) {
+export function drawObstacles(
+  ctx: CanvasRenderingContext2D,
+  runtime: GameRuntime,
+  palette: Palette,
+) {
   for (const o of runtime.obstacles) {
     ctx.save()
     const rad = 6
@@ -240,7 +254,12 @@ export function drawObstacles(ctx: CanvasRenderingContext2D, runtime: GameRuntim
   }
 }
 
-export function drawPhaseOverlay(ctx: CanvasRenderingContext2D, runtime: GameRuntime, palette: Palette, ui: UiState) {
+export function drawPhaseOverlay(
+  ctx: CanvasRenderingContext2D,
+  runtime: GameRuntime,
+  palette: Palette,
+  ui: UiState,
+) {
   if (runtime.phaseActive) {
     ctx.save()
     ctx.globalAlpha = 0.15
@@ -264,7 +283,7 @@ export function drawPhaseOverlay(ctx: CanvasRenderingContext2D, runtime: GameRun
       12,
       runtime.player.x + runtime.player.width / 2,
       runtime.groundY,
-      220
+      220,
     )
     g.addColorStop(0, withAlpha(palette.visWave, 0.14))
     g.addColorStop(1, withAlpha(palette.visWave, 0))
@@ -292,7 +311,7 @@ export function drawFlash(ctx: CanvasRenderingContext2D, runtime: GameRuntime) {
     ctx.fillStyle = `rgba(${flashColor}, ${alpha})`
     ctx.fillRect(0, 0, runtime.width, runtime.height)
     ctx.restore()
-    runtime.flashTimer = Math.max(0, runtime.flashTimer - (1 / 60))
+    runtime.flashTimer = Math.max(0, runtime.flashTimer - 1 / 60)
     if (runtime.flashTimer <= 0) {
       runtime.flashColor = undefined
     }

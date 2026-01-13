@@ -1,4 +1,3 @@
-
 <template>
   <div class="app-root">
     <header class="app-header">
@@ -27,7 +26,12 @@ import HoppyBlockGame from './components/HoppyBlockGame.vue'
   flex-direction: column;
   background: radial-gradient(circle at top, #1f2933 0, #020617 60%);
   color: #e5e7eb;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
 }
 
 .app-header {
@@ -62,7 +66,9 @@ import HoppyBlockGame from './components/HoppyBlockGame.vue'
   text-transform: uppercase;
   margin: 0;
   color: #e2f3ff;
-  text-shadow: 0 0 12px rgba(34, 211, 238, 0.8), 0 0 24px rgba(56, 189, 248, 0.6);
+  text-shadow:
+    0 0 12px rgba(34, 211, 238, 0.8),
+    0 0 24px rgba(56, 189, 248, 0.6);
   font-family: 'Audiowide', 'Orbitron', 'Michroma', system-ui, sans-serif;
 }
 
@@ -70,8 +76,9 @@ import HoppyBlockGame from './components/HoppyBlockGame.vue'
   position: absolute;
   inset: -6px;
   border-radius: 1.1rem;
-  background: radial-gradient(circle at 20% 20%, rgba(34, 197, 94, 0.4), transparent 40%),
-              radial-gradient(circle at 80% 80%, rgba(56, 189, 248, 0.35), transparent 45%);
+  background:
+    radial-gradient(circle at 20% 20%, rgba(34, 197, 94, 0.4), transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(56, 189, 248, 0.35), transparent 45%);
   filter: blur(12px);
   z-index: -1;
 }

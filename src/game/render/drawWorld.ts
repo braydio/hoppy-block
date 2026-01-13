@@ -19,7 +19,7 @@ export function drawWorld(
   runtime: GameRuntime,
   ui: UiState,
   palette: Palette,
-  intensityWindow: IntensityWindowState | null = null
+  intensityWindow: IntensityWindowState | null = null,
 ) {
   // Sky gradient
   const skyGrad = ctx.createLinearGradient(0, 0, runtime.width, runtime.height * 0.6)
@@ -48,13 +48,19 @@ export function drawWorld(
   ctx.restore()
 
   // Ground
-  const groundFill = runtime.intensityLeadInActive && palette.leadInGround ? palette.leadInGround : palette.ground
+  const groundFill =
+    runtime.intensityLeadInActive && palette.leadInGround ? palette.leadInGround : palette.ground
   ctx.fillStyle = groundFill
   ctx.fillRect(0, runtime.groundY, runtime.width, runtime.height - runtime.groundY)
   if (runtime.intensityLeadInActive) {
     ctx.save()
     ctx.fillStyle = palette.leadInOverlay ?? 'rgba(8, 47, 73, 0.22)'
-    ctx.fillRect(0, runtime.groundY - 24, runtime.width, Math.min(runtime.height - runtime.groundY + 36, runtime.height))
+    ctx.fillRect(
+      0,
+      runtime.groundY - 24,
+      runtime.width,
+      Math.min(runtime.height - runtime.groundY + 36, runtime.height),
+    )
     ctx.restore()
   }
 

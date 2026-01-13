@@ -86,7 +86,7 @@ export function createSpawnDebugView(canvas: HTMLCanvasElement) {
     yTop: number,
     yBottom: number,
     stroke: string,
-    fill: string
+    fill: string,
   ) {
     if (timeline.length < 2) return
     ctx.beginPath()
@@ -138,7 +138,7 @@ export function createSpawnDebugView(canvas: HTMLCanvasElement) {
     x: number,
     y: number,
     w: number,
-    h: number
+    h: number,
   ) {
     ctx.save()
     ctx.fillStyle = 'rgba(2, 6, 23, 0.92)'
@@ -160,7 +160,8 @@ export function createSpawnDebugView(canvas: HTMLCanvasElement) {
       if (cause.kind === 'intensity') label = `intensity: ${cause.value.toFixed(2)}`
       if (cause.kind === 'drive') label = `drive: ${cause.value.toFixed(2)}`
       if (cause.kind === 'dynamics') label = `dynamics: ${cause.delta.toFixed(2)}`
-      if (cause.kind === 'patternBias') label = `pattern: ${cause.signature} (${cause.bias.toFixed(2)})`
+      if (cause.kind === 'patternBias')
+        label = `pattern: ${cause.signature} (${cause.bias.toFixed(2)})`
       ctx.fillText(label, x + 10, offsetY)
       offsetY += 14
       if (offsetY > y + h - 10) break
@@ -220,48 +221,49 @@ export function createSpawnDebugView(canvas: HTMLCanvasElement) {
     drawCurve(
       ctx,
       data.timeline,
-      p => p.bass,
+      (p) => p.bass,
       range,
       xMin,
       xMax,
       bandTop + 8,
       bandTop + bandHeight - 8,
       colors.bass,
-      'rgba(34, 197, 94, 0.15)'
+      'rgba(34, 197, 94, 0.15)',
     )
     drawCurve(
       ctx,
       data.timeline,
-      p => p.mids,
+      (p) => p.mids,
       range,
       xMin,
       xMax,
       bandTop + 8,
       bandTop + bandHeight - 8,
       colors.mids,
-      'rgba(56, 189, 248, 0.12)'
+      'rgba(56, 189, 248, 0.12)',
     )
     drawCurve(
       ctx,
       data.timeline,
-      p => p.highs,
+      (p) => p.highs,
       range,
       xMin,
       xMax,
       bandTop + 8,
       bandTop + bandHeight - 8,
       colors.highs,
-      'rgba(248, 113, 113, 0.12)'
+      'rgba(248, 113, 113, 0.12)',
     )
 
     for (const entry of data.spawnHistory) {
       if (!entry.attribution) continue
       const x = timeToX(entry.time, range, canvas.width, pad)
-      const bandY = entry.attribution.dominantBand === 'high'
-        ? bandTop + 18
-        : entry.attribution.dominantBand === 'mid'
-          ? bandTop + bandHeight * 0.5
-          : bandTop + bandHeight - 18
+      const bandY =
+        entry.attribution.dominantBand === 'high'
+          ? bandTop + 18
+          : entry.attribution.dominantBand === 'mid'
+            ? bandTop + bandHeight * 0.5
+            : bandTop + bandHeight - 18
       ctx.fillStyle = entry.enemyType ? typeColors[entry.enemyType] : '#e2e8f0'
       ctx.beginPath()
       ctx.arc(x, bandY, 4, 0, Math.PI * 2)
@@ -271,42 +273,42 @@ export function createSpawnDebugView(canvas: HTMLCanvasElement) {
     drawCurve(
       ctx,
       data.timeline,
-      p => p.intensity,
+      (p) => p.intensity,
       range,
       xMin,
       xMax,
       magTop + 8,
       magTop + magHeight - 8,
       colors.intensity,
-      'rgba(244, 114, 182, 0.1)'
+      'rgba(244, 114, 182, 0.1)',
     )
     drawCurve(
       ctx,
       data.timeline,
-      p => p.drive,
+      (p) => p.drive,
       range,
       xMin,
       xMax,
       magTop + 8,
       magTop + magHeight - 8,
       colors.drive,
-      'rgba(56, 189, 248, 0.1)'
+      'rgba(56, 189, 248, 0.1)',
     )
     drawCurve(
       ctx,
       data.timeline,
-      p => Math.min(1, Math.abs(p.loudnessDelta)),
+      (p) => Math.min(1, Math.abs(p.loudnessDelta)),
       range,
       xMin,
       xMax,
       magTop + 8,
       magTop + magHeight - 8,
       colors.loudness,
-      'rgba(250, 204, 21, 0.1)'
+      'rgba(250, 204, 21, 0.1)',
     )
 
-    const maxTarget = Math.max(1, ...data.spawnTicks.map(t => t.targetPerBeat))
-    const maxSpawns = Math.max(1, ...data.spawnTicks.map(t => t.spawns))
+    const maxTarget = Math.max(1, ...data.spawnTicks.map((t) => t.targetPerBeat))
+    const maxSpawns = Math.max(1, ...data.spawnTicks.map((t) => t.spawns))
     for (const tick of data.spawnTicks) {
       const x = timeToX(tick.time, range, canvas.width, pad)
       const barH = (tick.targetPerBeat / maxTarget) * (magHeight - 16)

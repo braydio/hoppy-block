@@ -5,9 +5,27 @@ import { clamp } from '../systems/physicsSystem'
 
 export function drawEnemies(ctx: CanvasRenderingContext2D, runtime: GameRuntime, palette: Palette) {
   const enemyPalettes = {
-    gomba: { body: '#94a3b8', accent: '#22d3ee', face: '#0b1224', blush: '#cbd5f5', trim: '#38bdf8' },
-    spiker: { body: '#64748b', accent: '#22d3ee', face: '#0b1224', blush: '#a5b4fc', trim: '#f97316' },
-    floater: { body: '#cbd5f5', accent: '#22d3ee', face: '#0b1224', blush: '#fef9c3', trim: '#a855f7' },
+    gomba: {
+      body: '#94a3b8',
+      accent: '#22d3ee',
+      face: '#0b1224',
+      blush: '#cbd5f5',
+      trim: '#38bdf8',
+    },
+    spiker: {
+      body: '#64748b',
+      accent: '#22d3ee',
+      face: '#0b1224',
+      blush: '#a5b4fc',
+      trim: '#f97316',
+    },
+    floater: {
+      body: '#cbd5f5',
+      accent: '#22d3ee',
+      face: '#0b1224',
+      blush: '#fef9c3',
+      trim: '#a855f7',
+    },
   }
 
   for (const e of runtime.enemies) {
@@ -33,7 +51,15 @@ export function drawEnemies(ctx: CanvasRenderingContext2D, runtime: GameRuntime,
       if (e.type !== 'floater') {
         ctx.fillStyle = withAlpha(enemyColors.face, 0.15)
         ctx.beginPath()
-        ctx.ellipse(e.x + e.width / 2, e.y + e.height + 4, (e.width * 0.9) / 2, 3, 0, 0, Math.PI * 2)
+        ctx.ellipse(
+          e.x + e.width / 2,
+          e.y + e.height + 4,
+          (e.width * 0.9) / 2,
+          3,
+          0,
+          0,
+          Math.PI * 2,
+        )
         ctx.fill()
       }
 
@@ -195,7 +221,14 @@ export function drawEnemies(ctx: CanvasRenderingContext2D, runtime: GameRuntime,
 
       if (e.type === 'floater') {
         const rage = e.rage ?? 0
-        const core = ctx.createRadialGradient(e.width / 2, e.height / 2, 4, e.width / 2, e.height / 2, e.width / 2)
+        const core = ctx.createRadialGradient(
+          e.width / 2,
+          e.height / 2,
+          4,
+          e.width / 2,
+          e.height / 2,
+          e.width / 2,
+        )
         core.addColorStop(0, withAlpha(enemyColors.accent, 0.95))
         core.addColorStop(1, withAlpha(enemyColors.body, 0.8))
         ctx.fillStyle = core

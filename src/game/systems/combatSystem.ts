@@ -8,7 +8,11 @@ export function registerAirKill(runtime: GameRuntime) {
   runtime.airKillCombo += 1
 }
 
-export function triggerSquishBounce(runtime: GameRuntime, intensity = 1, playSfx?: (name: SfxName, loudness?: number) => void) {
+export function triggerSquishBounce(
+  runtime: GameRuntime,
+  intensity = 1,
+  playSfx?: (name: SfxName, loudness?: number) => void,
+) {
   const airborneBefore = !runtime.player.onGround
   const bounceScale = Math.max(0.6, intensity)
   runtime.player.vy = runtime.jumpVelocity * 0.7 * bounceScale
@@ -19,7 +23,7 @@ export function triggerSquishBounce(runtime: GameRuntime, intensity = 1, playSfx
     runtime.airComboMultiplier = clamp(
       runtime.airComboMultiplier + AIR_COMBO_STEP * bounceScale,
       1,
-      AIR_COMBO_MAX
+      AIR_COMBO_MAX,
     )
     runtime.airComboStreak += 1
     if (runtime.airComboStreak >= 3) {
@@ -37,7 +41,7 @@ export function applyBlastStrikes(
   runtime: GameRuntime,
   addBonus: (points: number) => void,
   addCharge: (amount: number) => void,
-  playSfx?: (name: SfxName, loudness?: number) => void
+  playSfx?: (name: SfxName, loudness?: number) => void,
 ) {
   const hitLeft = runtime.player.x
   const hitRight = runtime.player.x + runtime.player.width + DASH_RANGE
@@ -45,9 +49,9 @@ export function applyBlastStrikes(
   const hitBottom = runtime.player.y + runtime.player.height + 6
   let hitSomething = false
 
-  runtime.obstacles = runtime.obstacles.filter(o => {
-    const overlaps = o.x < hitRight && o.x + o.width > hitLeft &&
-      o.y < hitBottom && o.y + o.height > hitTop
+  runtime.obstacles = runtime.obstacles.filter((o) => {
+    const overlaps =
+      o.x < hitRight && o.x + o.width > hitLeft && o.y < hitBottom && o.y + o.height > hitTop
     if (overlaps) {
       hitSomething = true
       addBonus(120)
@@ -72,8 +76,8 @@ export function applyBlastStrikes(
 
   for (const e of runtime.enemies) {
     if (!e.alive || e.squished) continue
-    const overlaps = e.x < hitRight && e.x + e.width > hitLeft &&
-      e.y < hitBottom && e.y + e.height > hitTop
+    const overlaps =
+      e.x < hitRight && e.x + e.width > hitLeft && e.y < hitBottom && e.y + e.height > hitTop
 
     if (overlaps) {
       hitSomething = true
@@ -82,10 +86,7 @@ export function applyBlastStrikes(
       e.squishTimer = 0.18
       e.currentHeight = e.height
 
-      const points =
-        e.type === 'floater' ? 450 :
-        e.type === 'spiker' ? 320 :
-        250
+      const points = e.type === 'floater' ? 450 : e.type === 'spiker' ? 320 : 250
 
       addBonus(points)
       addCharge(12)
@@ -124,7 +125,7 @@ export function applyBlastStrikes(
 export function applySlideStrike(
   runtime: GameRuntime,
   addBonus: (points: number) => void,
-  playSfx?: (name: SfxName, loudness?: number) => void
+  playSfx?: (name: SfxName, loudness?: number) => void,
 ) {
   const slideLeft = Math.min(runtime.slideStartX, runtime.slideStartX + SLIDE_DISTANCE)
   const slideRight = Math.max(runtime.slideStartX, runtime.slideStartX + SLIDE_DISTANCE)

@@ -26,14 +26,14 @@ export function setupReplayRecorder(canvas: HTMLCanvasElement, runtime: GameRunt
   }
 
   if (runtime.replayRecorder) {
-    runtime.replayRecorder.ondataavailable = e => {
+    runtime.replayRecorder.ondataavailable = (e) => {
       if (!e.data || e.data.size === 0) return
       const entry = { data: e.data, t: performance.now(), type: e.data.type }
       runtime.replayBuffer.push(entry)
       const cutoff = performance.now() - 6000
-      runtime.replayBuffer = runtime.replayBuffer.filter(chunk => chunk.t >= cutoff)
+      runtime.replayBuffer = runtime.replayBuffer.filter((chunk) => chunk.t >= cutoff)
     }
-    runtime.replayRecorder.onerror = err => console.warn('replay recorder error', err)
+    runtime.replayRecorder.onerror = (err) => console.warn('replay recorder error', err)
     startRecorder()
   }
 }
@@ -60,7 +60,7 @@ export function ensureReplayRecorder(runtime: GameRuntime) {
 }
 
 function flushLatestChunk(runtime: GameRuntime) {
-  return new Promise<void>(resolve => {
+  return new Promise<void>((resolve) => {
     if (!runtime.replayRecorder || typeof runtime.replayRecorder.requestData !== 'function') {
       resolve()
       return
@@ -92,12 +92,15 @@ export async function captureInstantReplay(runtime: GameRuntime, ui: UiState) {
   ui.snapshotMessageTimer.value = 3
   const now = performance.now()
   const startTime = now - 5000
-  const recent = runtime.replayBuffer.filter(c => c.t >= startTime)
+  const recent = runtime.replayBuffer.filter((c) => c.t >= startTime)
   if (!recent.length) return
 
   try {
     const first = recent[0]!
-    const blob = new Blob(recent.map(r => r.data), { type: first.type || 'video/webm' })
+    const blob = new Blob(
+      recent.map((r) => r.data),
+      { type: first.type || 'video/webm' },
+    )
     if (ui.replayVideoUrl.value) URL.revokeObjectURL(ui.replayVideoUrl.value)
     ui.replayVideoUrl.value = URL.createObjectURL(blob)
     ui.replayPlaybackKey.value += 1
