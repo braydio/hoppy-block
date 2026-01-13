@@ -51,7 +51,7 @@ export interface Obstacle {
 }
 
 /**
- * Horizontal ground coverage expressed as a screen-space span.
+ * Horizontal ground coverage expressed as a screen-space span with a vertical anchor.
  */
 export interface GroundSegment {
   /** X start of the ground segment span. */
