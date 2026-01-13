@@ -91,6 +91,43 @@ export function getSupportingGroundSegment(
   )
 }
 
+/**
+ * Determine the nearest adjacent lane height at the player's horizontal position.
+ *
+ * @param segments Ground spans to scan.
+ * @param x Player x position.
+ * @param width Player width.
+ * @param playerBottomY Player bottom y position.
+ * @returns Adjacent lane y or null if no alternative lane is available.
+ */
+export function getAdjacentLaneY(
+  segments: GroundSegment[],
+  x: number,
+  width: number,
+  playerBottomY: number,
+): number | null {
+  const laneYs = Array.from(
+    new Set(segments.filter((seg) => x + width > seg.start && x < seg.end).map((seg) => seg.y)),
+  ).sort((a, b) => a - b)
+
+  if (laneYs.length < 2) return null
+
+  const currentIndex = laneYs.reduce((closestIndex, y, index) => {
+    const currentDistance = Math.abs(laneYs[closestIndex] - playerBottomY)
+    const nextDistance = Math.abs(y - playerBottomY)
+    return nextDistance < currentDistance ? index : closestIndex
+  }, 0)
+
+  if (currentIndex <= 0) return laneYs[1]
+  if (currentIndex >= laneYs.length - 1) return laneYs[laneYs.length - 2]
+
+  const lowerLane = laneYs[currentIndex - 1]
+  const upperLane = laneYs[currentIndex + 1]
+  return Math.abs(playerBottomY - lowerLane) <= Math.abs(playerBottomY - upperLane)
+    ? lowerLane
+    : upperLane
+}
+
 export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
   const { ui, keybinds, runtime } = state
   const audioEngine = createAudioEngine()
@@ -624,6 +661,9 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     }
   }
 
+  /**
+   * Trigger a phase shift and optionally lane-snap during segmented terrain.
+   */
   function handlePhase() {
     startAudio()
     if (ui.gameOver.value) return
@@ -640,6 +680,29 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
 
     audioEngine.setSlapMix(0.9)
     audioEngine.playSfx('phase', 0.9)
+
+    if (runtime.groundMode === 'segmented-y') {
+      const playerBottomY = runtime.player.y + runtime.player.height
+      const adjacentLaneY = getAdjacentLaneY(
+        runtime.groundSegments,
+        runtime.player.x,
+        runtime.player.width,
+        playerBottomY,
+      )
+
+      if (adjacentLaneY !== null) {
+        // Snap vertically without affecting horizontal momentum.
+        runtime.player.y = adjacentLaneY - runtime.player.height
+        runtime.player.vy = 0
+        runtime.player.onGround = true
+        runtime.jumpStartY = runtime.player.y
+        runtime.jumpApexY = runtime.player.y
+
+        // Short invulnerability buffer to prevent immediate collision on lane swap.
+        runtime.graceUsed = true
+        runtime.invulnTimer = Math.max(runtime.invulnTimer, 0.45)
+      }
+    }
 
     runtime.sonicBursts.push({
       x: runtime.player.x + runtime.player.width / 2,
