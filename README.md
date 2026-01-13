@@ -16,7 +16,7 @@ Rhythm runner where you surf the beat, jump gaps, and slam enemies for charge an
 - Double-jump midair (costs charge) to extend combos; antigrav/slow-mo drain charge while held.
 - Huge slams near Spikers pop their spikes off, letting you stomp them safely afterward.
 - Beat Blast (dash) deletes anything in front of you when timed near the beat.
-- Phase Shift lets you ignore one category of hazard until the timer ends.
+- Phase Shift lets you ignore one category of hazard until the timer ends; in segmented terrain it snaps you to the nearest adjacent lane with a brief grace window.
 - Energy (charge) powers special moves; keep it above zero to retain options.
 - Land three aerial hits in a row to trigger an instant-replay clip of the moment.
 
