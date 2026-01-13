@@ -277,47 +277,90 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
    * Reset ground coverage to a continuous platform across the viewport.
    */
   function resetGroundSegments() {
-    runtime.groundSegments = [{ start: 0, end: runtime.width }]
+    runtime.groundSegments = [
+      {
+        start: 0,
+        end: runtime.width,
+        y: runtime.groundY,
+        levelIndex: 0,
+        safe: true,
+      },
+    ]
   }
 
   /**
    * Return the ground segment that currently supports the player, if any.
+   *
+   * Only segments flagged as safe can support the player.
    *
    * @param x Player x position.
    * @param width Player width.
    * @returns Overlapping ground span or null when above a gap.
    */
   function getSupportingGroundSegment(x: number, width: number): GroundSegment | null {
-    return runtime.groundSegments.find((seg) => x + width > seg.start && x < seg.end) ?? null
+    return (
+      runtime.groundSegments.find((seg) => seg.safe && x + width > seg.start && x < seg.end) ?? null
+    )
   }
 
   /**
    * Recompute ground spans for the active intensity window, keeping quarter-beat spaced pads.
+   *
+   * For segmented-y mode, generate multiple deterministic height levels and tag only one or two
+   * as safe per beat window while keeping gap widths within the jumpable distance.
    *
    * Ground segmentation only applies while the runtime ground mode is set to
    * segmented-y.
    *
    * @param windowState Active intensity window state.
    */
+  // TODO: Add unit coverage for segmented ground generation; currently exercised in the live loop.
   function rebuildGroundSegments(windowState: IntensityWindowState | null) {
     const beatSeconds = 60 / Math.max(1, ui.bpm.value)
     const quarterBeatSeconds = beatSeconds / 4
-    const spacing = Math.max(48, runtime.scrollSpeed * quarterBeatSeconds)
+    const baseSpacing = Math.max(48, runtime.scrollSpeed * quarterBeatSeconds)
 
     if (runtime.groundMode !== 'segmented-y' || !windowState || windowState.phase !== 'active') {
       resetGroundSegments()
       return
     }
 
+    const airtime = (2 * Math.abs(runtime.jumpVelocity)) / Math.max(1, runtime.gravity)
+    const maxJumpDistance = runtime.scrollSpeed * airtime
+    const minGap = Math.max(28, maxJumpDistance * 0.3)
+    const minSegmentWidth = 28
+    const spacing = Math.max(baseSpacing, minGap + minSegmentWidth)
+    const maxGap = Math.min(Math.max(minGap, maxJumpDistance * 0.75), spacing - minSegmentWidth)
     const widthScale = 1.18 - windowState.progress * 0.78
-    const segmentWidth = Math.max(28, spacing * widthScale)
+    const desiredSegmentWidth = Math.max(minSegmentWidth, spacing * widthScale)
+    const segmentWidth = clamp(desiredSegmentWidth, spacing - maxGap, spacing - minGap)
     const segments: GroundSegment[] = []
     const startOffset = -segmentWidth * 0.35
+    const levelOffsets = [0, -80, -160]
+    const levels = levelOffsets.map((offset) => runtime.groundY + offset)
+    const beatWindowIndex = Math.max(0, Math.floor(runtime.beatIndex / 4))
+    const safeCount = beatWindowIndex % 3 === 0 ? 2 : 1
+    const primarySafeLevel = beatWindowIndex % levels.length
+    const safeLevels = new Set<number>([primarySafeLevel])
+    if (safeCount === 2) {
+      const secondarySafeLevel = (primarySafeLevel + 1 + (beatWindowIndex % 2)) % levels.length
+      safeLevels.add(secondarySafeLevel)
+    }
 
+    // Use deterministic, beat-window-driven safe levels while keeping gaps solvable by jump range.
     for (let x = startOffset; x < runtime.width + spacing; x += spacing) {
       const segStart = Math.max(0, x)
       const segEnd = Math.min(runtime.width, x + segmentWidth)
-      if (segEnd - segStart > 6) segments.push({ start: segStart, end: segEnd })
+      if (segEnd - segStart <= 6) continue
+      for (let levelIndex = 0; levelIndex < levels.length; levelIndex += 1) {
+        segments.push({
+          start: segStart,
+          end: segEnd,
+          y: levels[levelIndex],
+          levelIndex,
+          safe: safeLevels.has(levelIndex),
+        })
+      }
     }
 
     runtime.groundSegments = segments
