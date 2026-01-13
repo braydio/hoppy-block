@@ -3,6 +3,8 @@ import { withAlpha } from './colors'
 import type { Palette } from './types'
 import { DEFAULT_PALETTE } from '../core/constants'
 
+let lastRms = 0
+
 export function drawHatBursts(
   ctx: CanvasRenderingContext2D,
   runtime: GameRuntime,
@@ -77,11 +79,11 @@ export function drawAudioVisualizer(
   if (!runtime.analyser || !runtime.freqData || !runtime.timeData) return
 
   const analyser = runtime.analyser
-  const freq = runtime.freqData as unknown as Uint8Array
-  const time = runtime.timeData as unknown as Uint8Array
+  const freq = runtime.freqData
+  const time = runtime.timeData
 
-  ;(analyser as any).getByteFrequencyData(freq)
-  ;(analyser as any).getByteTimeDomainData(time)
+  analyser.getByteFrequencyData(freq)
+  analyser.getByteTimeDomainData(time)
 
   let sumSq = 0
   for (let i = 0; i < time.length; i++) {
@@ -89,9 +91,8 @@ export function drawAudioVisualizer(
     sumSq += sample * sample
   }
   const rms = Math.sqrt(sumSq / Math.max(1, time.length)) / 128
-  const lastRms = (drawAudioVisualizer as any)._lastRms ?? rms
   const rmsDelta = rms - lastRms
-  ;(drawAudioVisualizer as any)._lastRms = rms
+  lastRms = rms
 
   const barCount = 32
   const barWidth = runtime.width / barCount
@@ -171,7 +172,6 @@ export function drawAudioVisualizer(
 export function drawShockwaves(
   ctx: CanvasRenderingContext2D,
   runtime: GameRuntime,
-  palette: Palette,
 ) {
   for (const s of runtime.shockwaves) {
     ctx.save()

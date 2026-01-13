@@ -1,9 +1,8 @@
 import type { GameRuntime } from '../core/gameState'
-import type { Palette } from './types'
 import { withAlpha } from './colors'
 import { clamp } from '../systems/physicsSystem'
 
-export function drawEnemies(ctx: CanvasRenderingContext2D, runtime: GameRuntime, palette: Palette) {
+export function drawEnemies(ctx: CanvasRenderingContext2D, runtime: GameRuntime) {
   const enemyPalettes = {
     gomba: {
       body: '#94a3b8',
@@ -38,7 +37,6 @@ export function drawEnemies(ctx: CanvasRenderingContext2D, runtime: GameRuntime,
     const enemyColors = enemyPalettes[e.type as keyof typeof enemyPalettes] || enemyPalettes.gomba
 
     if (e.telegraph && e.telegraph > 0) {
-      const t = e.telegraph
       ctx.globalAlpha = 0.4 + 0.3 * Math.sin(performance.now() * 0.015)
       ctx.strokeStyle = '#fbbf24'
       ctx.lineWidth = 3

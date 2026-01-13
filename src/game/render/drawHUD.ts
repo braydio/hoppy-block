@@ -79,8 +79,6 @@ export function drawHUD(
   ctx.fillText('INTENSITY', bpmX, pad + 32)
 
   // Beat pulse indicator
-  const beatX = runtime.width - intensityBarWidth - pad - 20
-  const beatY = pad + 16
   const beatMs = 60000 / Math.max(1, ui.bpm.value)
   const nearestEnemy = runtime.enemies
     .filter((e) => e.alive && !e.squished && e.x + e.width > runtime.player.x)

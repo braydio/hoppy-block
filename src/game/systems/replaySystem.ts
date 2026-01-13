@@ -16,7 +16,7 @@ export function setupReplayRecorder(canvas: HTMLCanvasElement, runtime: GameRunt
   try {
     const stream = canvas.captureStream(60)
     runtime.replayRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' })
-  } catch (_) {
+  } catch {
     try {
       const stream = canvas.captureStream(60)
       runtime.replayRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' })
@@ -43,7 +43,7 @@ export function stopReplayRecorder(runtime: GameRuntime) {
     if (runtime.replayRecorder && runtime.replayRecorder.state === 'recording') {
       runtime.replayRecorder.stop()
     }
-  } catch (_) {
+  } catch {
     // ignore
   }
 }
@@ -67,18 +67,18 @@ function flushLatestChunk(runtime: GameRuntime) {
     }
     const recorder = runtime.replayRecorder
     const handler = () => {
-      recorder.removeEventListener('dataavailable', handler as any)
+      recorder.removeEventListener('dataavailable', handler)
       resolve()
     }
-    recorder.addEventListener('dataavailable', handler as any, { once: true })
+    recorder.addEventListener('dataavailable', handler, { once: true })
     try {
       recorder.requestData()
-    } catch (_) {
-      recorder.removeEventListener('dataavailable', handler as any)
+    } catch {
+      recorder.removeEventListener('dataavailable', handler)
       resolve()
     }
     setTimeout(() => {
-      recorder.removeEventListener('dataavailable', handler as any)
+      recorder.removeEventListener('dataavailable', handler)
       resolve()
     }, 80)
   })

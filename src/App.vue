@@ -15,7 +15,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import HoppyBlockGame from './components/HoppyBlockGame.vue'
 </script>
 

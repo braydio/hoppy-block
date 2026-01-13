@@ -110,7 +110,7 @@ export function createSpawnDebugView(canvas: HTMLCanvasElement) {
     ctx.fill()
   }
 
-  function getSelectedIndex(data: SpawnDebugData) {
+  function getSelectedIndex() {
     if (pinnedIndex != null) return pinnedIndex
     if (hoveredIndex != null) return hoveredIndex
     return null
@@ -207,10 +207,10 @@ export function createSpawnDebugView(canvas: HTMLCanvasElement) {
 
     const range = frozenRange ?? getRange(data.timeline)
 
-    if (!frozenRange && getSelectedIndex(data) != null) {
+    if (!frozenRange && getSelectedIndex() != null) {
       frozenRange = range
     }
-    if (getSelectedIndex(data) == null) {
+    if (getSelectedIndex() == null) {
       frozenRange = null
     }
 
@@ -322,7 +322,7 @@ export function createSpawnDebugView(canvas: HTMLCanvasElement) {
       ctx.fill()
     }
 
-    const selectedIndex = getSelectedIndex(data)
+    const selectedIndex = getSelectedIndex()
     if (selectedIndex != null) {
       const entry = data.spawnHistory[selectedIndex]
       if (entry) {

@@ -33,7 +33,6 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
   let patternTotal = 0
   let spawnAccumulator = 0
   let lastAudioTime = 0
-  let lastEnemyAudioSpawnTime = -Infinity
   const maxSpawnLogEntries = 8
   const maxSpawnEvents = 240
   const maxSpawnHistory = 300
@@ -302,7 +301,6 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
     const beatsToImpact = estimateBeatsToImpact(beatMs)
     const spawnX = computeSpawnX(beatsToImpact, beatMs)
     // Spawn far enough ahead that a perfect slam lines up with the beat.
-    const projectedImpactBeat = runtime.beatIndex + beatsToImpact
     const beatsSinceEnemy = runtime.beatIndex - runtime.lastEnemySpawnBeat
     const beatsSinceObstacle = runtime.beatIndex - runtime.lastObstacleSpawnBeat
     const forceSpawnGap = Math.max(
@@ -362,7 +360,6 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
     lastAudioTime = audioTime
     if (wrapped) {
       spawnAccumulator = 0
-      lastEnemyAudioSpawnTime = -Infinity
     }
 
     const progress =
@@ -416,7 +413,6 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
         }
         if (count > 0) {
           spawnAccumulator -= 1
-          lastEnemyAudioSpawnTime = audioTime
           runtime.lastEnemySpawnBeat = runtime.beatIndex
           didSpawn = true
           spawnsThisTick += count
@@ -564,7 +560,6 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
       patternTotal = 0
       spawnAccumulator = 0
       lastAudioTime = 0
-      lastEnemyAudioSpawnTime = -Infinity
     },
   }
 }

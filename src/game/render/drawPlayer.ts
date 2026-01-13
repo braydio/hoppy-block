@@ -45,13 +45,13 @@ export function drawPlayer(
   }
 
   // Draw main body
-  drawPlayerBody(ctx, runtime, bodyColor, anim, palette)
+  drawPlayerBody(ctx, runtime, bodyColor, anim)
 
   // Draw animated details
-  drawAnimatedDetails(ctx, runtime, anim, palette)
+  drawAnimatedDetails(ctx, runtime, anim)
 
   // Draw thrusters
-  drawThrusters(ctx, runtime, anim, palette)
+  drawThrusters(ctx, runtime, anim)
 
   ctx.restore()
 
@@ -183,7 +183,6 @@ function drawPlayerBody(
   runtime: GameRuntime,
   color: string,
   anim: PlayerAnimationState,
-  palette: Palette,
 ): void {
   const w = runtime.player.width
   const h = runtime.player.height
@@ -268,7 +267,6 @@ function drawAnimatedDetails(
   ctx: CanvasRenderingContext2D,
   runtime: GameRuntime,
   anim: PlayerAnimationState,
-  palette: Palette,
 ): void {
   const w = runtime.player.width
   const h = runtime.player.height
@@ -302,7 +300,7 @@ function drawAnimatedDetails(
 
     // Wing animation based on state
     let wingLength = w * 0.15
-    let wingHeight = h * 0.16
+    const wingHeight = h * 0.16
     let flapAngle = wingBaseAngle * dir
 
     if (anim.currentState === 'jumping') {
@@ -351,7 +349,6 @@ function drawThrusters(
   ctx: CanvasRenderingContext2D,
   runtime: GameRuntime,
   anim: PlayerAnimationState,
-  palette: Palette,
 ): void {
   const w = runtime.player.width
   const h = runtime.player.height

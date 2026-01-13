@@ -198,7 +198,7 @@ export function updateAnimationState(
     anim.transitionProgress = 0
 
     // Trigger state-specific effects
-    onStateEnter(anim, newState, runtime)
+    onStateEnter(anim, newState)
   } else {
     anim.stateTime += dt
     anim.transitionProgress = Math.min(1, anim.transitionProgress + dt * 8)
@@ -237,7 +237,7 @@ export function updateAnimationState(
 /**
  * Called when entering a new animation state
  */
-function onStateEnter(anim: PlayerAnimationState, state: PlayerState, runtime: GameRuntime): void {
+function onStateEnter(anim: PlayerAnimationState, state: PlayerState): void {
   switch (state) {
     case 'jumping':
       anim.targetScaleX = 0.85

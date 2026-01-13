@@ -79,18 +79,18 @@ export interface GameRuntime {
   nextJumpStyle: 'flip' | 'twirl'
   obstacles: Obstacle[]
   enemies: Enemy[]
-  shockwaves: any[]
-  scorePops: any[]
-  sonicBursts: any[]
-  hatBursts: any[]
+  shockwaves: Shockwave[]
+  scorePops: ScorePop[]
+  sonicBursts: SonicBurst[]
+  hatBursts: HatBurst[]
   spawnBeacons: { x: number; y: number; alpha: number; band: 'bass' | 'mid' | 'high' }[]
-  playerFragments: any[]
+  playerFragments: PlayerFragment[]
   groundSegments: GroundSegment[]
   groundMode: 'flat' | 'segmented-y'
   dashActive: boolean
   dashTimer: number
   dashVelocity: number
-  dashGhosts: any[]
+  dashGhosts: DashGhost[]
   slideActive: boolean
   slideTimer: number
   slideStartX: number
@@ -150,6 +150,55 @@ export interface GameRuntime {
   playerAnimation: PlayerAnimationState | null
   landingRecovery: number
   wasOnGround: boolean
+}
+
+export interface Shockwave {
+  x: number
+  y: number
+  w?: number
+  h?: number
+  alpha: number
+  intense?: boolean
+}
+
+export interface ScorePop {
+  x: number
+  y: number
+  value: number
+  alpha: number
+  vy: number
+}
+
+export interface SonicBurst {
+  x: number
+  y: number
+  r: number
+  alpha: number
+}
+
+export interface HatBurst {
+  x: number
+  y: number
+  r: number
+  alpha: number
+  vy: number
+}
+
+export interface PlayerFragment {
+  x: number
+  y: number
+  vx: number
+  vy: number
+  size: number
+  alpha: number
+}
+
+export interface DashGhost {
+  x: number
+  y: number
+  w: number
+  h: number
+  alpha: number
 }
 
 export interface HighScoreEntry {

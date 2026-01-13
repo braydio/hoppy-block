@@ -75,7 +75,13 @@ export function createAudioEngine() {
     audio.loop = true
     audio.volume = 0.72
 
-    audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
+    const AudioContextCtor =
+      window.AudioContext ||
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!AudioContextCtor) {
+      throw new Error('AudioContext is not available in this browser')
+    }
+    audioCtx = new AudioContextCtor()
     const src = audioCtx.createMediaElementSource(audio)
 
     analyser = audioCtx.createAnalyser()
@@ -156,8 +162,8 @@ export function createAudioEngine() {
     const freq = freqData as unknown as Uint8Array
     const time = timeData as unknown as Uint8Array
 
-    ;(analyser as any).getByteFrequencyData(freq)
-    ;(analyser as any).getByteTimeDomainData(time)
+    analyser.getByteFrequencyData(freq)
+    analyser.getByteTimeDomainData(time)
     let bass = 0,
       mids = 0,
       highs = 0

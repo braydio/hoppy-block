@@ -390,7 +390,6 @@ let liveRuntime: GameRuntime | null = null
 const liveEnemies: Enemy[] = []
 let deathRuntime: GameRuntime | null = null
 let deathStart = 0
-let deathVariant = 0
 const deathFragments: Array<{
   x: number
   y: number
@@ -518,7 +517,6 @@ function startLevelMap() {
       }
     }
 
-    const gridColor = 'rgba(148, 163, 184, 0.3)'
     const beatLineColor = 'rgba(148, 163, 184, 0.6)'
     const measureColor = 'rgba(226, 232, 240, 0.7)'
 
@@ -877,7 +875,7 @@ function renderCelebrationClip(ctx: CanvasRenderingContext2D, width: number, hei
     }
   }
 
-  drawEnemies(ctx, runtime, palette)
+  drawEnemies(ctx, runtime)
   drawPlayer(ctx, runtime, ui, palette)
 
   ctx.save()
@@ -1083,7 +1081,7 @@ function renderLiveStatus(ctx: CanvasRenderingContext2D, width: number, height: 
   ctx.moveTo(0, runtime.groundY + 1)
   ctx.lineTo(width, runtime.groundY + 1)
   ctx.stroke()
-  drawEnemies(ctx, runtime, palette)
+  drawEnemies(ctx, runtime)
   drawPlayer(ctx, runtime, ui, palette)
 }
 
@@ -1511,7 +1509,6 @@ function startStatusScreen() {
         initCelebrationScene(width, height)
       } else if (nextMode === 'death') {
         deathStart = performance.now()
-        deathVariant = 0
         initDeathScene(width, height)
       }
     }
