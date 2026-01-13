@@ -336,6 +336,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.isSlamming = false
     runtime.jumpStartY = runtime.player.y
     runtime.jumpApexY = runtime.player.y
+    runtime.jumpStyle = 'flip'
+    runtime.nextJumpStyle = 'flip'
     runtime.enemies = []
     runtime.shockwaves = []
     runtime.scorePops = []
@@ -483,6 +485,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     maybeGrantBeatJumpCharge()
 
     if (runtime.player.onGround) {
+      runtime.jumpStyle = runtime.nextJumpStyle
+      runtime.nextJumpStyle = runtime.jumpStyle === 'flip' ? 'twirl' : 'flip'
       runtime.player.vy = runtime.jumpVelocity
       runtime.player.onGround = false
       runtime.isSlamming = false
@@ -1148,7 +1152,13 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     if (!runtime.player.onGround) {
       const jumpHeight = runtime.jumpStartY - runtime.jumpApexY || 1
       const progress = Math.min(1, (runtime.jumpStartY - runtime.player.y) / (jumpHeight * 2))
-      runtime.rotation = progress * Math.PI * 3
+      if (runtime.jumpStyle === 'twirl') {
+        const twirlSpin = progress * Math.PI * 2
+        const sway = Math.sin(progress * Math.PI) * 0.35
+        runtime.rotation = twirlSpin + sway
+      } else {
+        runtime.rotation = progress * Math.PI * 3
+      }
 
       if (runtime.hangActive) {
         runtime.player.vy = Math.max(runtime.player.vy - 180 * dtRaw, -90)

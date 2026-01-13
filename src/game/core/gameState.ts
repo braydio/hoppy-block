@@ -8,6 +8,7 @@ import { defaultKeybinds, difficultyOptions, keybindOptions, PHASE_STATES } from
 import type { SpawnAttribution } from '../../debug/spawnCauses'
 import type { Enemy, GroundSegment, Keybinds, Obstacle, Player } from './types'
 import type { IntensityWindowState } from '../systems/audioEngine'
+import type { PlayerAnimationState } from '../render/playerAnimation'
 
 export interface UiState {
   score: Ref<number>
@@ -74,6 +75,8 @@ export interface GameRuntime {
   isSlamming: boolean
   jumpStartY: number
   jumpApexY: number
+  jumpStyle: 'flip' | 'twirl'
+  nextJumpStyle: 'flip' | 'twirl'
   obstacles: Obstacle[]
   enemies: Enemy[]
   shockwaves: any[]
@@ -143,6 +146,9 @@ export interface GameRuntime {
   intensityLeadInActive: boolean
   intensityPeakActive: boolean
   airControlTightened: boolean
+  playerAnimation: PlayerAnimationState | null
+  landingRecovery: number
+  wasOnGround: boolean
 }
 
 export interface HighScoreEntry {
@@ -248,6 +254,8 @@ export function createGameState(): GameState {
     isSlamming: false,
     jumpStartY: 0,
     jumpApexY: 0,
+    jumpStyle: 'flip',
+    nextJumpStyle: 'flip',
     obstacles: [],
     enemies: [],
   shockwaves: [],
