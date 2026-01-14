@@ -27,15 +27,34 @@ type SpawnDebugTick = {
   spawns: number
 }
 
+type LaneDebugLane = {
+  levelIndex: number
+  y: number
+  safe: boolean
+}
+
+type LaneDebugEntry = {
+  time: number
+  laneIndex: number | null
+  lanes: LaneDebugLane[]
+}
+
 type SpawnDebugData = {
   timeline: AudioTimelineEntry[]
   spawnHistory: SpawnHistoryEntry[]
   spawnTicks: SpawnDebugTick[]
+  laneHistory: LaneDebugEntry[]
   currentTime: number
 }
 
 type Range = { min: number; max: number }
 
+/**
+ * Spawn debug renderer that visualizes audio energy, spawns, and lane safety over time.
+ *
+ * @param canvas Canvas used to render the debug overlay.
+ * @returns Pointer handlers and a draw function for the overlay.
+ */
 export function createSpawnDebugView(canvas: HTMLCanvasElement) {
   let hoveredIndex: number | null = null
   let pinnedIndex: number | null = null
@@ -56,10 +75,20 @@ export function createSpawnDebugView(canvas: HTMLCanvasElement) {
     floater: '#22d3ee',
   }
 
+  const laneColors = {
+    safe: 'rgba(34, 197, 94, 0.55)',
+    unsafe: 'rgba(248, 113, 113, 0.55)',
+    path: 'rgba(226, 232, 240, 0.85)',
+    currentTime: 'rgba(226, 232, 240, 0.55)',
+  }
+
+  /**
+   * Ensure the canvas matches the layout size needed for the debug panels.
+   */
   function ensureCanvasSize() {
     const parentWidth = canvas.parentElement?.clientWidth ?? 800
     const width = Math.max(320, parentWidth)
-    const height = 360
+    const height = 520
     if (canvas.width !== width) canvas.width = width
     if (canvas.height !== height) canvas.height = height
   }
@@ -132,6 +161,26 @@ export function createSpawnDebugView(canvas: HTMLCanvasElement) {
     return bestIndex
   }
 
+  /**
+   * Find the nearest lane debug entry for a given timestamp.
+   *
+   * @param history Lane debug samples.
+   * @param time Timestamp to search around.
+   * @returns Closest entry or null when history is empty.
+   */
+  function getLaneEntryForTime(history: LaneDebugEntry[], time: number) {
+    let bestEntry: LaneDebugEntry | null = null
+    let bestDist = Infinity
+    for (const entry of history) {
+      const dist = Math.abs(entry.time - time)
+      if (dist < bestDist) {
+        bestDist = dist
+        bestEntry = entry
+      }
+    }
+    return bestEntry
+  }
+
   function drawInfoBox(
     ctx: CanvasRenderingContext2D,
     entry: SpawnHistoryEntry,
@@ -169,6 +218,113 @@ export function createSpawnDebugView(canvas: HTMLCanvasElement) {
     ctx.restore()
   }
 
+  /**
+   * Render the lane timeline, unsafe gaps, and player lane track.
+   *
+   * @param ctx Canvas context used for drawing.
+   * @param history Lane debug samples.
+   * @param range Current time range.
+   * @param panel Panel bounds.
+   * @param currentTime Audio time cursor.
+   */
+  function drawLaneTimeline(
+    ctx: CanvasRenderingContext2D,
+    history: LaneDebugEntry[],
+    range: Range,
+    panel: { x: number; y: number; width: number; height: number; pad: number },
+    currentTime: number,
+  ) {
+    if (history.length === 0) {
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.7)'
+      ctx.font = '11px system-ui'
+      ctx.fillText('Lane data will appear once the run starts.', panel.x + 10, panel.y + 18)
+      return
+    }
+
+    const [firstEntry] = history
+    if (!firstEntry) return
+    const referenceEntry = history.reduce(
+      (best, entry) => (entry.lanes.length > best.lanes.length ? entry : best),
+      firstEntry,
+    )
+    const laneCount = Math.max(1, referenceEntry.lanes.length)
+    const laneRowHeight = panel.height / laneCount
+
+    for (let i = 0; i < history.length; i += 1) {
+      const entry = history[i]
+      if (!entry) continue
+      const nextEntry = history[i + 1]
+      const x = timeToX(entry.time, range, canvas.width, panel.pad)
+      const nextX = nextEntry ? timeToX(nextEntry.time, range, canvas.width, panel.pad) : x + 3
+      const barWidth = Math.max(1, nextX - x)
+      for (let laneIndex = 0; laneIndex < laneCount; laneIndex += 1) {
+        const lane = entry.lanes[laneIndex]
+        const safe = lane?.safe ?? false
+        ctx.fillStyle = safe ? laneColors.safe : laneColors.unsafe
+        ctx.fillRect(x, panel.y + laneIndex * laneRowHeight, barWidth, laneRowHeight - 1)
+      }
+    }
+
+    ctx.strokeStyle = laneColors.path
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    let pathStarted = false
+    for (const entry of history) {
+      if (entry.laneIndex == null) continue
+      const x = timeToX(entry.time, range, canvas.width, panel.pad)
+      const y = panel.y + (entry.laneIndex + 0.5) * laneRowHeight
+      if (!pathStarted) {
+        ctx.moveTo(x, y)
+        pathStarted = true
+      } else {
+        ctx.lineTo(x, y)
+      }
+    }
+    ctx.stroke()
+
+    const currentEntry = getLaneEntryForTime(history, currentTime)
+    const currentLaneLabel =
+      currentEntry?.laneIndex != null
+        ? `Current lane: ${currentEntry.laneIndex}`
+        : 'Current lane: -'
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.85)'
+    ctx.font = '11px system-ui'
+    ctx.fillText(currentLaneLabel, panel.x + panel.width - 150, panel.y + 14)
+
+    const currentX = timeToX(currentTime, range, canvas.width, panel.pad)
+    ctx.strokeStyle = laneColors.currentTime
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(currentX, panel.y)
+    ctx.lineTo(currentX, panel.y + panel.height)
+    ctx.stroke()
+
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.8)'
+    ctx.font = '10px system-ui'
+    for (let laneIndex = 0; laneIndex < laneCount; laneIndex += 1) {
+      const lane = referenceEntry?.lanes[laneIndex]
+      const labelY = panel.y + laneIndex * laneRowHeight + 12
+      const label = lane ? `Lane ${laneIndex} · y=${Math.round(lane.y)}` : `Lane ${laneIndex}`
+      ctx.fillText(label, panel.x + 8, labelY)
+    }
+
+    const legendY = panel.y + panel.height - 10
+    ctx.fillStyle = laneColors.safe
+    ctx.fillRect(panel.x + panel.width - 160, legendY - 8, 10, 10)
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.8)'
+    ctx.fillText('Safe', panel.x + panel.width - 144, legendY)
+    ctx.fillStyle = laneColors.unsafe
+    ctx.fillRect(panel.x + panel.width - 96, legendY - 8, 10, 10)
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.8)'
+    ctx.fillText('Unsafe', panel.x + panel.width - 80, legendY)
+  }
+
+  /**
+   * Draw the spawn debug overlay when debug mode is active.
+   *
+   * @param data Debug data payload from the game loop.
+   * @param ui UI state with debug flag.
+   */
   function draw(data: SpawnDebugData, ui: UiState) {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
@@ -198,10 +354,15 @@ export function createSpawnDebugView(canvas: HTMLCanvasElement) {
     const bandHeight = 140
     const gap = 16
     const magHeight = 110
-    const infoHeight = canvas.height - pad * 2 - bandHeight - magHeight - gap * 2
+    const laneHeight = 90
+    const infoHeight = Math.max(
+      32,
+      canvas.height - pad * 2 - bandHeight - magHeight - laneHeight - gap * 3,
+    )
     const bandTop = pad
     const magTop = bandTop + bandHeight + gap
-    const infoTop = magTop + magHeight + gap
+    const laneTop = magTop + magHeight + gap
+    const infoTop = laneTop + laneHeight + gap
     const xMin = pad
     const xMax = canvas.width - pad
 
@@ -217,6 +378,7 @@ export function createSpawnDebugView(canvas: HTMLCanvasElement) {
     ctx.fillStyle = 'rgba(15, 23, 42, 0.8)'
     ctx.fillRect(xMin, bandTop, xMax - xMin, bandHeight)
     ctx.fillRect(xMin, magTop, xMax - xMin, magHeight)
+    ctx.fillRect(xMin, laneTop, xMax - xMin, laneHeight)
 
     drawCurve(
       ctx,
@@ -322,6 +484,14 @@ export function createSpawnDebugView(canvas: HTMLCanvasElement) {
       ctx.fill()
     }
 
+    drawLaneTimeline(
+      ctx,
+      data.laneHistory,
+      range,
+      { x: xMin, y: laneTop, width: xMax - xMin, height: laneHeight, pad },
+      data.currentTime,
+    )
+
     const selectedIndex = getSelectedIndex()
     if (selectedIndex != null) {
       const entry = data.spawnHistory[selectedIndex]
@@ -343,6 +513,13 @@ export function createSpawnDebugView(canvas: HTMLCanvasElement) {
     }
   }
 
+  /**
+   * Update hover state for spawn attribution markers.
+   *
+   * @param event Pointer event for hover position.
+   * @param data Debug data payload.
+   * @param ui UI state with debug flag.
+   */
   function onPointerMove(event: PointerEvent, data: SpawnDebugData, ui: UiState) {
     if (!ui.debugAudioSpawnView.value || pinnedIndex != null) return
     const rect = canvas.getBoundingClientRect()
@@ -353,6 +530,13 @@ export function createSpawnDebugView(canvas: HTMLCanvasElement) {
     hoveredIndex = getSpawnForTime(data, t)
   }
 
+  /**
+   * Pin the spawn attribution tooltip on click.
+   *
+   * @param event Pointer event for the click.
+   * @param data Debug data payload.
+   * @param ui UI state with debug flag.
+   */
   function onPointerDown(event: PointerEvent, data: SpawnDebugData, ui: UiState) {
     if (!ui.debugAudioSpawnView.value) return
     const rect = canvas.getBoundingClientRect()
@@ -368,6 +552,9 @@ export function createSpawnDebugView(canvas: HTMLCanvasElement) {
     }
   }
 
+  /**
+   * Clear hover state when leaving the canvas.
+   */
   function onPointerLeave() {
     if (pinnedIndex == null) hoveredIndex = null
   }

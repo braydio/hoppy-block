@@ -1867,7 +1867,7 @@ function handleSpawnDebugPointerLeave() {
 
 .spawn-debug-canvas {
   width: 100%;
-  height: 360px;
+  height: 520px;
   display: block;
   border-radius: 0.75rem;
   border: 1px solid rgba(148, 163, 184, 0.2);
