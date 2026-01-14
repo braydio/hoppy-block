@@ -36,7 +36,7 @@ export function drawHUD(
 
   ctx.font = '12px system-ui'
   ctx.fillStyle = '#e5e7eb'
-  ctx.fillText(`CHARGE`, pad, pad - 4)
+  ctx.fillText('CHARGE', pad, pad - 4)
   ctx.restore()
 
   // Power Status Icons
