@@ -128,6 +128,67 @@ export function getAdjacentLaneY(
     : upperLane
 }
 
+/**
+ * Build a lane snapshot for debug overlays, marking safe spans at the player's x position.
+ *
+ * @param segments Ground spans to scan.
+ * @param playerX Player x position.
+ * @param playerWidth Player width.
+ * @param playerBottomY Player bottom y position.
+ * @returns Snapshot containing ordered lanes and the closest lane index.
+ */
+export function getLaneDebugSnapshot(
+  segments: GroundSegment[],
+  playerX: number,
+  playerWidth: number,
+  playerBottomY: number,
+): { lanes: Array<{ levelIndex: number; y: number; safe: boolean }>; laneIndex: number | null } {
+  const laneMap = new Map<number, { y: number; segments: GroundSegment[] }>()
+  for (const segment of segments) {
+    const lane = laneMap.get(segment.levelIndex)
+    if (lane) {
+      lane.segments.push(segment)
+    } else {
+      laneMap.set(segment.levelIndex, { y: segment.y, segments: [segment] })
+    }
+  }
+
+  const lanes = Array.from(laneMap.entries())
+    .map(([levelIndex, lane]) => ({
+      levelIndex,
+      y: lane.y,
+      segments: lane.segments,
+    }))
+    .sort((a, b) => a.y - b.y)
+
+  const laneEntries = lanes.map((lane) => {
+    const overlaps = lane.segments.some(
+      (seg) => playerX + playerWidth > seg.start && playerX < seg.end,
+    )
+    // Treat missing overlap as a gap, so only overlapping safe spans count as safe.
+    const safe = lane.segments.some(
+      (seg) => seg.safe && playerX + playerWidth > seg.start && playerX < seg.end,
+    )
+    return {
+      levelIndex: lane.levelIndex,
+      y: lane.y,
+      safe: overlaps && safe,
+    }
+  })
+
+  if (laneEntries.length === 0) {
+    return { lanes: [], laneIndex: null }
+  }
+
+  const laneIndex = laneEntries.reduce((closestIndex, lane, index) => {
+    const currentDistance = Math.abs(laneEntries[closestIndex].y - playerBottomY)
+    const nextDistance = Math.abs(lane.y - playerBottomY)
+    return nextDistance < currentDistance ? index : closestIndex
+  }, 0)
+
+  return { lanes: laneEntries, laneIndex }
+}
+
 export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
   const { ui, keybinds, runtime } = state
   const audioEngine = createAudioEngine()
@@ -136,6 +197,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
   let lastCelebrationStreak = 0
   let baseGravity = runtime.gravity
   let baseJumpVelocity = runtime.jumpVelocity
+  const maxLaneDebugSamples = 720
+  const laneDebugSampleInterval = 0.12
   const celebrationPools = {
     three: [
       'TRICKY!',
@@ -336,6 +399,39 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
   }
   function consumeCharge(amount: number) {
     ui.charge.value = clamp(ui.charge.value - amount, 0, 100)
+  }
+
+  /**
+   * Capture lane debug samples for the spawn debug overlay.
+   *
+   * @param time Audio time in seconds.
+   */
+  function recordLaneDebugSample(time: number) {
+    if (!ui.debugAudioSpawnView.value) {
+      if (runtime.laneDebugHistory.length > 0) {
+        runtime.laneDebugHistory = []
+      }
+      return
+    }
+
+    const lastSample = runtime.laneDebugHistory[runtime.laneDebugHistory.length - 1]
+    if (lastSample && time - lastSample.time < laneDebugSampleInterval) return
+
+    const snapshot = getLaneDebugSnapshot(
+      runtime.groundSegments,
+      runtime.player.x,
+      runtime.player.width,
+      runtime.player.y + runtime.player.height,
+    )
+
+    runtime.laneDebugHistory.push({
+      time,
+      laneIndex: snapshot.laneIndex,
+      lanes: snapshot.lanes,
+    })
+    if (runtime.laneDebugHistory.length > maxLaneDebugSamples) {
+      runtime.laneDebugHistory.splice(0, runtime.laneDebugHistory.length - maxLaneDebugSamples)
+    }
   }
 
   /**
@@ -542,6 +638,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.comboGraceTimer = 0
     runtime.spawnEvents = []
     runtime.spawnHistory = []
+    runtime.laneDebugHistory = []
     runtime.spawnDebugTicks = []
     runtime.intensityWindow = null
     resetGroundSegments()
@@ -1172,6 +1269,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     if (runtime.player.y < runtime.jumpApexY) {
       runtime.jumpApexY = runtime.player.y
     }
+
+    recordLaneDebugSample(audioEngine.audio?.currentTime ?? 0)
 
     for (const e of runtime.enemies) {
       if (e.telegraph && e.telegraph > 0) {
@@ -1817,6 +1916,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       timeline: audioEngine.audioTimeline,
       spawnHistory: runtime.spawnHistory,
       spawnTicks: runtime.spawnDebugTicks,
+      laneHistory: runtime.laneDebugHistory,
       currentTime: audioEngine.audio?.currentTime ?? 0,
     }),
   }

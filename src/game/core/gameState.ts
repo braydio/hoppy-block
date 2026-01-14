@@ -132,6 +132,15 @@ export interface GameRuntime {
     time: number
     enemyType?: Enemy['type']
   }>
+  laneDebugHistory: Array<{
+    time: number
+    laneIndex: number | null
+    lanes: Array<{
+      levelIndex: number
+      y: number
+      safe: boolean
+    }>
+  }>
   spawnDebugTicks: Array<{
     beat: number
     time: number
@@ -356,6 +365,7 @@ export function createGameState(): GameState {
     replayStopTimeout: null,
     spawnEvents: [],
     spawnHistory: [],
+    laneDebugHistory: [],
     spawnDebugTicks: [],
     player: {
       x: 0,

@@ -6,3 +6,7 @@
   interior strokes to keep gaps readable.
 - During lead-in intensity windows, a subtle overlay is applied per segment to maintain the lead-in
   treatment without masking gaps.
+
+## Debug overlays
+- The spawn debug overlay now includes a lane timeline panel that visualizes active Y-levels, unsafe gaps,
+  and the player's lane index over time to support difficulty tuning.
