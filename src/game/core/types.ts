@@ -21,6 +21,7 @@ export interface Enemy {
   y: number
   width: number
   height: number
+  laneIndex?: number
   alive: boolean
   squished?: boolean
   squishTimer?: number
@@ -37,6 +38,9 @@ export interface Enemy {
   squishImpulse?: number
   beatBob?: number
   dancePhase?: number
+  falling?: boolean
+  fallVy?: number
+  fallSpin?: number
   spawnAttribution?: SpawnAttribution
   spawnTime?: number
 }
@@ -48,6 +52,14 @@ export interface Obstacle {
   height: number
   passed?: boolean
   _destroy?: boolean
+}
+
+export interface TokenPickup {
+  x: number
+  y: number
+  r: number
+  value: number
+  laneIndex: number
 }
 
 /**

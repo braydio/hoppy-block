@@ -1,4 +1,4 @@
-import { DIFFICULTY_PRESETS, PLAYER_ANCHOR_X } from '../core/constants'
+import { DIFFICULTY_PRESETS, PLAYER_ANCHOR_X, LANE_OFFSETS } from '../core/constants'
 import type { Enemy } from '../core/types'
 import type { GameRuntime, UiState, SpawnLogEntry } from '../core/gameState'
 import type { SpawnAttribution, SpawnCause } from '../../debug/spawnCauses'
@@ -79,15 +79,25 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
   }
 
   function spawnEnemy(type: Enemy['type'], spawnX?: number) {
+    const laneIndex =
+      runtime.groundMode === 'segmented-y'
+        ? type === 'floater'
+          ? Math.min(2, LANE_OFFSETS.length - 1)
+          : type === 'spiker'
+            ? Math.min(1, LANE_OFFSETS.length - 1)
+            : 0
+        : 0
+    const laneY = runtime.groundY + (LANE_OFFSETS[laneIndex] ?? 0)
     let enemy: Enemy | null = null
     if (type === 'gomba') {
       enemy = {
         type: 'gomba',
         band: 'bass',
         x: spawnX ?? runtime.width + 40,
-        y: runtime.groundY - 28,
+        y: laneY - 28,
         width: 32,
         height: 28,
+        laneIndex,
         alive: true,
         squished: false,
         squishTimer: 0,
@@ -102,9 +112,10 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
         type: 'spiker',
         band: 'mid',
         x: spawnX ?? runtime.width + 40,
-        y: runtime.groundY - 34,
+        y: laneY - 34,
         width: 26,
         height: 34,
+        laneIndex,
         alive: true,
         squished: false,
         squishTimer: 0,
@@ -121,9 +132,10 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
         type: 'floater',
         band: 'high',
         x: spawnX ?? runtime.width + 40,
-        y: runtime.groundY - 120,
+        y: laneY - 120,
         width: 28,
         height: 28,
+        laneIndex,
         alive: true,
         squished: false,
         bob: 0,
@@ -180,6 +192,24 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
       return 1
     }
     return 0
+  }
+
+  function spawnToken(spawnX?: number) {
+    if (runtime.groundMode !== 'segmented-y') return 0
+    const dangerousLaneIndices = LANE_OFFSETS.map((_offset, index) => index).slice(1)
+    if (dangerousLaneIndices.length === 0) return 0
+    const laneIndex =
+      dangerousLaneIndices[Math.floor(Math.random() * dangerousLaneIndices.length)] ?? 0
+    const laneY = runtime.groundY + (LANE_OFFSETS[laneIndex] ?? 0)
+    const token = {
+      x: spawnX ?? runtime.width + 40,
+      y: laneY - 50,
+      r: 7,
+      value: 1,
+      laneIndex,
+    }
+    runtime.tokens.push(token)
+    return 1
   }
 
   function spawnTelegraphedEnemy(type: Enemy['type'], spawnX: number) {
@@ -496,6 +526,13 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
       runtime.lastObstacleSpawnBeat = runtime.beatIndex
     }
 
+    if (!isSubBeat && runtime.groundMode === 'segmented-y') {
+      const tokenChance = Math.min(0.12, 0.03 + intensity * 0.06 + drive * 0.03)
+      if (Math.random() < tokenChance && runtime.tokens.length < 4) {
+        spawnToken(spawnX + 20)
+      }
+    }
+
     if (debugEnabled && enemySpawnsThisTick > 0) {
       runtime.spawnEvents.push({
         beat: runtime.beatIndex,
@@ -553,6 +590,7 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
     spawnEnemy,
     spawnObstacle,
     spawnFormation,
+    spawnToken,
     spawnBeatDrivenEntities,
     pulseEnemiesOnBeat,
     reset() {

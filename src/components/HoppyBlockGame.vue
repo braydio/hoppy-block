@@ -119,6 +119,12 @@
             <kbd>{{ keyLabel(keybinds.blast) }}</kbd> — Beat Blast
           </p>
           <p>
+            <kbd>{{ keyLabel(keybinds.laneUp) }}</kbd> — Track Up
+          </p>
+          <p>
+            <kbd>{{ keyLabel(keybinds.laneDown) }}</kbd> — Track Down
+          </p>
+          <p>
             <kbd>{{ keyLabel(keybinds.phase) }}</kbd> — Phase Shift
           </p>
 
@@ -260,6 +266,10 @@
         <kbd>{{ keyLabel(keybinds.phase) }}</kbd> Phase Shift
       </div>
       <div class="controls-row">
+        <kbd>{{ keyLabel(keybinds.laneUp) }}</kbd> Track Up ·
+        <kbd>{{ keyLabel(keybinds.laneDown) }}</kbd> Track Down
+      </div>
+      <div class="controls-row">
         <kbd>{{ keyLabel(keybinds.pause) }}</kbd> Pause / Resume
       </div>
       <div class="controls-row">
@@ -304,6 +314,10 @@
         <label class="toggle-row">
           <input type="checkbox" v-model="ui.debugAudioSpawnView.value" />
           <span>Debug spawn view</span>
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" v-model="ui.developerMode.value" />
+          <span>Developer mode (vanishing ground)</span>
         </label>
         <label class="slider-row">
           <span>Beat window</span>
@@ -710,6 +724,7 @@ function initCelebrationScene(width: number, height: number) {
     dashGhosts: [],
     invulnTimer: 0,
     deathByEnemy: false,
+    tokens: [],
     phaseActive: false,
     phaseMode: 'terrain',
     phaseModeIndex: 0,
@@ -1021,6 +1036,7 @@ function initLiveScene(width: number, height: number) {
     dashGhosts: [],
     invulnTimer: 0,
     deathByEnemy: false,
+    tokens: [],
     phaseActive: false,
     phaseMode: 'terrain',
     phaseModeIndex: 0,
@@ -1117,6 +1133,7 @@ function initDeathScene(width: number, height: number) {
     dashGhosts: [],
     invulnTimer: 0,
     deathByEnemy: true,
+    tokens: [],
     phaseActive: false,
     phaseMode: 'terrain',
     phaseModeIndex: 0,

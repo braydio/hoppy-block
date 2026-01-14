@@ -78,6 +78,9 @@ export function drawHUD(
   ctx.fillStyle = '#e5e7eb'
   ctx.fillText('INTENSITY', bpmX, pad + 32)
 
+  ctx.fillStyle = '#fbbf24'
+  ctx.fillText(`TOKENS ${ui.tokens.value}`, bpmX, pad + 50)
+
   // Beat pulse indicator
   const beatMs = 60000 / Math.max(1, ui.bpm.value)
   const nearestEnemy = runtime.enemies
@@ -127,7 +130,7 @@ export function drawHUD(
   ctx.restore()
 
   ctx.fillStyle = '#fcd34d'
-  ctx.fillText(`Combo x${Math.max(0, runtime.airKillCombo)}`, bpmX, pad + 50)
+  ctx.fillText(`Combo x${Math.max(0, runtime.airKillCombo)}`, bpmX, pad + 68)
 
   ctx.restore()
 }

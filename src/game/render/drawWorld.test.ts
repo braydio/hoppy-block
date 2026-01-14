@@ -100,13 +100,9 @@ describe('drawWorld', () => {
       (call) => call.h > 20 && (call.y === 150 || call.y === 120),
     )
     const safeFill = groundFills.find((call) => call.y === 150)
-    const unsafeFill = groundFills.find((call) => call.y === 120)
 
     expect(safeFill).toBeDefined()
-    expect(unsafeFill).toBeDefined()
     expect(safeFill?.x).toBe(3)
-    expect(unsafeFill?.x).toBe(-3)
-    expect(safeFill?.alpha).toBeGreaterThan(unsafeFill?.alpha ?? 0)
     expect(
       fillCalls.some((call) => call.y === 150 && call.h === 6 && call.fillStyle === palette.beat),
     ).toBe(true)

@@ -25,10 +25,11 @@ export const CHARGE_REGEN_GROUND = 40
 export const CHARGE_REGEN_AIR = 30
 export const DEFAULT_TRACK = '/audio/clarity.mp3'
 export const PHASE_STATES = ['terrain', 'gomba', 'spiker', 'floater'] as const
+export const LANE_OFFSETS = [0, -80, -160] as const
 
 export const DEFAULT_PALETTE = {
   stripe: '#0f172a',
-  ground: '#111827',
+  ground: '#1f2933',
   beat: '#22d3ee',
   visBar: 'rgb(148, 163, 184)',
   visWave: 'rgba(250, 204, 21, 0.7)',
@@ -129,6 +130,8 @@ export const keybindOptions = [
   { id: 'antigrav', label: 'Antigrav' },
   { id: 'slowmo', label: 'Slow-Mo' },
   { id: 'blast', label: 'Beat Blast' },
+  { id: 'laneUp', label: 'Track Up' },
+  { id: 'laneDown', label: 'Track Down' },
   { id: 'phase', label: 'Phase Shift' },
   { id: 'pause', label: 'Pause/Resume' },
   { id: 'restart', label: 'Restart' },
@@ -140,6 +143,8 @@ export const defaultKeybinds: Keybinds = {
   antigrav: ['ArrowUp'],
   slowmo: ['ArrowDown'],
   blast: ['ArrowRight'],
+  laneUp: ['KeyW'],
+  laneDown: ['KeyS'],
   phase: ['ArrowLeft'],
   pause: ['KeyP'],
   restart: ['Escape'],

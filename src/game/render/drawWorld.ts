@@ -5,6 +5,7 @@ import type { GameRuntime, UiState } from '../core/gameState'
 import type { GroundSegment } from '../core/types'
 import type { Palette } from './types'
 import type { IntensityWindowState } from '../systems/audioEngine'
+import { withAlpha } from './colors'
 
 /**
  * Paints the world background and ground, layering parallax stripes, segmented lanes,
@@ -83,11 +84,18 @@ export function drawWorld(
       const segmentX = segment.start + laneOffset
       const segmentHeight = runtime.height - segment.y
       const baseAlpha = segment.safe ? 0.86 + safePulseBoost : 0.38
+      const laneTint = 0.12 + laneIndex * 0.08
 
       ctx.save()
       ctx.globalAlpha = Math.min(1, Math.max(0, baseAlpha))
-      ctx.fillStyle = groundFill
-      ctx.fillRect(segmentX, segment.y, segmentWidth, segmentHeight)
+      if (segment.safe) {
+        ctx.fillStyle = groundFill
+        ctx.fillRect(segmentX, segment.y, segmentWidth, segmentHeight)
+
+        ctx.globalAlpha = Math.min(1, Math.max(0, baseAlpha + laneTint))
+        ctx.fillStyle = withAlpha(palette.beat, 0.25 + laneTint)
+        ctx.fillRect(segmentX, segment.y, segmentWidth, 8)
+      }
 
       if (segment.safe && safePulseGlow > 0) {
         ctx.globalAlpha = Math.min(1, Math.max(0, baseAlpha + safePulseGlow))
@@ -98,7 +106,12 @@ export function drawWorld(
       if (!segment.safe) {
         // Dashed interior stripes reinforce unsafe spans without overwhelming the base fill.
         ctx.save()
-        ctx.globalAlpha = Math.min(1, Math.max(0, baseAlpha + 0.18))
+        const voidGrad = ctx.createLinearGradient(0, segment.y, 0, runtime.height)
+        voidGrad.addColorStop(0, 'rgba(2, 6, 23, 0.1)')
+        voidGrad.addColorStop(1, 'rgba(2, 6, 23, 0.55)')
+        ctx.globalAlpha = Math.min(1, Math.max(0, 0.6 + safePulseBoost))
+        ctx.fillStyle = voidGrad
+        ctx.fillRect(segmentX, segment.y, segmentWidth, segmentHeight)
         ctx.strokeStyle = palette.beat
         ctx.lineWidth = 6
         ctx.setLineDash(unsafeDashPattern)
@@ -107,6 +120,13 @@ export function drawWorld(
           ctx.moveTo(segmentX, y)
           ctx.lineTo(segmentX + segmentWidth, y)
         }
+        ctx.stroke()
+        ctx.setLineDash([])
+        ctx.lineWidth = 2
+        ctx.globalAlpha = 0.6
+        ctx.beginPath()
+        ctx.moveTo(segmentX, segment.y)
+        ctx.lineTo(segmentX + segmentWidth, segment.y)
         ctx.stroke()
         ctx.restore()
       }
@@ -125,6 +145,30 @@ export function drawWorld(
       }
     })
   })
+
+  ctx.save()
+  orderedLanes.forEach((lane, laneIndex) => {
+    ctx.globalAlpha = 0.18 + laneIndex * 0.1
+    ctx.strokeStyle = withAlpha(palette.beat, 0.55)
+    ctx.lineWidth = 2.5
+    ctx.setLineDash([4, 10])
+    ctx.beginPath()
+    ctx.moveTo(0, lane.y)
+    ctx.lineTo(runtime.width, lane.y)
+    ctx.stroke()
+    ctx.setLineDash([])
+    ctx.globalAlpha = 0.12 + laneIndex * 0.06
+    ctx.fillStyle = withAlpha(palette.beat, 0.25)
+    for (let x = 8; x < runtime.width; x += 140) {
+      ctx.beginPath()
+      ctx.moveTo(x, lane.y - 10)
+      ctx.lineTo(x + 10, lane.y)
+      ctx.lineTo(x, lane.y + 10)
+      ctx.closePath()
+      ctx.fill()
+    }
+  })
+  ctx.restore()
 
   // Beat line
   ctx.save()

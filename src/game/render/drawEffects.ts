@@ -71,10 +71,32 @@ export function drawDash(ctx: CanvasRenderingContext2D, runtime: GameRuntime) {
   runtime.dashGhosts = runtime.dashGhosts.filter((g) => g.alpha > 0.05)
 }
 
+export function drawTokens(ctx: CanvasRenderingContext2D, runtime: GameRuntime, palette: Palette) {
+  if (runtime.tokens.length === 0) return
+  for (const token of runtime.tokens) {
+    ctx.save()
+    ctx.globalAlpha = 0.9
+    ctx.translate(token.x, token.y)
+    ctx.rotate(Math.PI * 0.25)
+    ctx.fillStyle = palette.beat
+    ctx.shadowColor = palette.beat
+    ctx.shadowBlur = 8
+    const size = token.r * 2
+    ctx.fillRect(-size / 2, -size / 2, size, size)
+    ctx.shadowBlur = 0
+    ctx.globalAlpha = 0.35
+    ctx.strokeStyle = '#0f172a'
+    ctx.lineWidth = 2
+    ctx.strokeRect(-size / 2, -size / 2, size, size)
+    ctx.restore()
+  }
+}
+
 export function drawAudioVisualizer(
   ctx: CanvasRenderingContext2D,
   runtime: GameRuntime,
   palette: Palette,
+  ui: UiState,
 ) {
   if (!runtime.analyser || !runtime.freqData || !runtime.timeData) return
 
@@ -125,6 +147,7 @@ export function drawAudioVisualizer(
   }
 
   ctx.save()
+  ctx.globalAlpha = ui.developerMode.value ? 0.2 : 1
   ctx.strokeStyle = palette.visWave
   ctx.lineWidth = 2
   ctx.beginPath()

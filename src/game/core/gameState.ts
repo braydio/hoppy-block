@@ -6,7 +6,7 @@ import { reactive, ref } from 'vue'
 import type { Ref } from 'vue'
 import { defaultKeybinds, difficultyOptions, keybindOptions, PHASE_STATES } from './constants'
 import type { SpawnAttribution } from '../../debug/spawnCauses'
-import type { Enemy, GroundSegment, Keybinds, Obstacle, Player } from './types'
+import type { Enemy, GroundSegment, Keybinds, Obstacle, Player, TokenPickup } from './types'
 import type { IntensityWindowState } from '../systems/audioEngine'
 import type { PlayerAnimationState } from '../render/playerAnimation'
 
@@ -47,6 +47,8 @@ export interface UiState {
   paused: Ref<boolean>
   invincible: Ref<boolean>
   debugAudioSpawnView: Ref<boolean>
+  developerMode: Ref<boolean>
+  tokens: Ref<number>
 }
 
 export interface GameRuntime {
@@ -84,6 +86,7 @@ export interface GameRuntime {
   sonicBursts: SonicBurst[]
   hatBursts: HatBurst[]
   spawnBeacons: { x: number; y: number; alpha: number; band: 'bass' | 'mid' | 'high' }[]
+  tokens: TokenPickup[]
   playerFragments: PlayerFragment[]
   groundSegments: GroundSegment[]
   groundMode: 'flat' | 'segmented-y'
@@ -287,6 +290,8 @@ export function createGameState(): GameState {
     paused: ref(false),
     invincible: ref(false),
     debugAudioSpawnView: ref(false),
+    developerMode: ref(false),
+    tokens: ref(0),
   }
 
   const runtime: GameRuntime = {
@@ -324,6 +329,7 @@ export function createGameState(): GameState {
     sonicBursts: [],
     hatBursts: [],
     spawnBeacons: [],
+    tokens: [],
     playerFragments: [],
     groundSegments: [{ start: 0, end: baseWidth, y: baseGroundY, levelIndex: 0, safe: true }],
     groundMode: 'flat',
@@ -397,6 +403,8 @@ export function loadHighScores(ui: UiState) {
     if (raw) ui.highScores.value = JSON.parse(raw)
     const storedName = localStorage.getItem('hoppy-name')
     if (storedName) ui.playerName.value = storedName
+    const storedTokens = localStorage.getItem('hoppy-tokens')
+    if (storedTokens) ui.tokens.value = Number(storedTokens) || 0
   } catch (err) {
     console.warn('high score load failed', err)
   }
@@ -407,6 +415,14 @@ export function persistHighScores(ui: UiState) {
     localStorage.setItem('hoppy-highscores', JSON.stringify(ui.highScores.value))
   } catch (err) {
     console.warn('high score save failed', err)
+  }
+}
+
+export function persistTokens(ui: UiState) {
+  try {
+    localStorage.setItem('hoppy-tokens', String(ui.tokens.value))
+  } catch (err) {
+    console.warn('token save failed', err)
   }
 }
 

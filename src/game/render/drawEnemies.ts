@@ -32,7 +32,8 @@ export function drawEnemies(ctx: CanvasRenderingContext2D, runtime: GameRuntime)
 
     const bobY = clamp(e.bob || 0, -6, 10)
     const hopPhase = performance.now() * 0.01 + e.x * 0.05
-    const hopLift = e.type === 'floater' ? 0 : Math.abs(Math.sin(hopPhase)) * 8
+    const hopLift =
+      e.type === 'floater' || e.falling ? 0 : Math.abs(Math.sin(hopPhase)) * 8
     const squash = clamp(e.squash || 1, 0.85, 1.2)
     const enemyColors = enemyPalettes[e.type as keyof typeof enemyPalettes] || enemyPalettes.gomba
 
@@ -62,6 +63,10 @@ export function drawEnemies(ctx: CanvasRenderingContext2D, runtime: GameRuntime)
       }
 
       ctx.translate(e.x + e.width / 2, e.y + e.height / 2 + bobY - hopLift)
+      if (e.falling) {
+        const spin = (e.fallSpin ?? 0) * 0.6
+        ctx.rotate(spin)
+      }
       ctx.scale(1 / squash, squash)
       ctx.translate(-e.width / 2, -e.height / 2)
 

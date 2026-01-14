@@ -40,6 +40,7 @@ import {
   CHARGE_DRAIN_RATE,
   CHARGE_REGEN_GROUND,
   CHARGE_REGEN_AIR,
+  LANE_OFFSETS,
   PHASE_STATES,
 } from './core/constants'
 import { keyLabel, matchesKey } from './core/keybinds'
@@ -57,9 +58,11 @@ import {
   drawScorePops,
   drawShockwaves,
   drawSonicBursts,
+  drawTokens,
 } from './render/drawEffects'
 import { drawPlayer } from './render/drawPlayer'
 import { drawEnemies } from './render/drawEnemies'
+import { persistTokens } from './core/gameState'
 import type { GameState } from './core/gameState'
 import type { GroundSegment } from './core/types'
 
@@ -72,7 +75,7 @@ const GROUND_ALIGN_EPSILON = 6
  * @param x Player x position.
  * @param width Player width.
  * @param playerBottomY Player bottom y position.
- * @param epsilon Vertical alignment tolerance in pixels.
+ * @param epsilon Vertical snap tolerance in pixels.
  * @returns Overlapping ground span or null when above a gap.
  */
 export function getSupportingGroundSegment(
@@ -84,8 +87,9 @@ export function getSupportingGroundSegment(
 ): GroundSegment | null {
   return (
     segments.find((seg) => {
+      if (!seg.safe) return false
       const overlapsHorizontally = x + width > seg.start && x < seg.end
-      const alignedVertically = Math.abs(playerBottomY - seg.y) < epsilon
+      const alignedVertically = playerBottomY >= seg.y - epsilon
       return overlapsHorizontally && alignedVertically
     }) ?? null
   )
@@ -187,6 +191,43 @@ export function getLaneDebugSnapshot(
   }, 0)
 
   return { lanes: laneEntries, laneIndex }
+}
+
+/**
+ * Find the next safe lane in the requested direction at the player's x position.
+ */
+export function getLaneYByDirection(
+  segments: GroundSegment[],
+  x: number,
+  width: number,
+  playerBottomY: number,
+  direction: 'up' | 'down',
+): number | null {
+  const laneMap = new Map<number, { y: number; safe: boolean }>()
+  for (const seg of segments) {
+    const overlaps = x + width > seg.start && x < seg.end
+    if (!overlaps) continue
+    const lane = laneMap.get(seg.levelIndex)
+    if (lane) {
+      lane.safe = lane.safe || seg.safe
+    } else {
+      laneMap.set(seg.levelIndex, { y: seg.y, safe: seg.safe })
+    }
+  }
+  const lanes = Array.from(laneMap.values()).sort((a, b) => a.y - b.y)
+  if (lanes.length === 0) return null
+
+  const currentIndex = lanes.reduce((closestIndex, lane, index) => {
+    const currentDistance = Math.abs(lanes[closestIndex].y - playerBottomY)
+    const nextDistance = Math.abs(lane.y - playerBottomY)
+    return nextDistance < currentDistance ? index : closestIndex
+  }, 0)
+
+  const step = direction === 'up' ? -1 : 1
+  for (let i = currentIndex + step; i >= 0 && i < lanes.length; i += step) {
+    if (lanes[i]?.safe) return lanes[i]?.y ?? null
+  }
+  return null
 }
 
 export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
@@ -458,12 +499,6 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
    * @param width Player width.
    * @returns Overlapping ground span or null when above a gap.
    */
-  function getSupportingGroundSegment(x: number, width: number): GroundSegment | null {
-    return (
-      runtime.groundSegments.find((seg) => seg.safe && x + width > seg.start && x < seg.end) ?? null
-    )
-  }
-
   /**
    * Recompute ground spans for the active intensity window, keeping quarter-beat spaced pads.
    *
@@ -476,12 +511,25 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
    * @param windowState Active intensity window state.
    */
   // TODO: Add unit coverage for segmented ground generation; currently exercised in the live loop.
-  function rebuildGroundSegments(windowState: IntensityWindowState | null) {
+  function rebuildGroundSegments(
+    windowState: IntensityWindowState | null,
+    forceSegmented = false,
+  ) {
     const beatSeconds = 60 / Math.max(1, ui.bpm.value)
     const quarterBeatSeconds = beatSeconds / 4
     const baseSpacing = Math.max(48, runtime.scrollSpeed * quarterBeatSeconds)
+    const activeWindow = forceSegmented
+      ? ({
+          start: 0,
+          end: 0,
+          leadInStart: 0,
+          peak: 1,
+          phase: 'active',
+          progress: 0.5,
+        } as IntensityWindowState)
+      : windowState
 
-    if (runtime.groundMode !== 'segmented-y' || !windowState || windowState.phase !== 'active') {
+    if (runtime.groundMode !== 'segmented-y' || !activeWindow || activeWindow.phase !== 'active') {
       resetGroundSegments()
       return
     }
@@ -492,13 +540,12 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     const minSegmentWidth = 28
     const spacing = Math.max(baseSpacing, minGap + minSegmentWidth)
     const maxGap = Math.min(Math.max(minGap, maxJumpDistance * 0.75), spacing - minSegmentWidth)
-    const widthScale = 1.18 - windowState.progress * 0.78
+    const widthScale = 1.18 - activeWindow.progress * 0.78
     const desiredSegmentWidth = Math.max(minSegmentWidth, spacing * widthScale)
     const segmentWidth = clamp(desiredSegmentWidth, spacing - maxGap, spacing - minGap)
     const segments: GroundSegment[] = []
     const startOffset = -segmentWidth * 0.35
-    const levelOffsets = [0, -80, -160]
-    const levels = levelOffsets.map((offset) => runtime.groundY + offset)
+    const levels = LANE_OFFSETS.map((offset) => runtime.groundY + offset)
     const beatWindowIndex = Math.max(0, Math.floor(runtime.beatIndex / 4))
     const safeCount = beatWindowIndex % 3 === 0 ? 2 : 1
     const primarySafeLevel = beatWindowIndex % levels.length
@@ -507,6 +554,13 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       const secondarySafeLevel = (primarySafeLevel + 1 + (beatWindowIndex % 2)) % levels.length
       safeLevels.add(secondarySafeLevel)
     }
+    const playerBottomY = runtime.player.y + runtime.player.height
+    const closestLevelIndex = levels.reduce((closestIndex, levelY, index) => {
+      const currentDistance = Math.abs(levels[closestIndex] - playerBottomY)
+      const nextDistance = Math.abs(levelY - playerBottomY)
+      return nextDistance < currentDistance ? index : closestIndex
+    }, 0)
+    safeLevels.add(closestLevelIndex)
 
     // Use deterministic, beat-window-driven safe levels while keeping gaps solvable by jump range.
     for (let x = startOffset; x < runtime.width + spacing; x += spacing) {
@@ -522,6 +576,27 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
           safe: safeLevels.has(levelIndex),
         })
       }
+    }
+
+    const playerX = runtime.player.x
+    const playerWidth = runtime.player.width
+    const hasSafeOverlap = segments.some(
+      (seg) =>
+        seg.safe &&
+        seg.levelIndex === closestLevelIndex &&
+        playerX + playerWidth > seg.start &&
+        playerX < seg.end,
+    )
+    if (!hasSafeOverlap) {
+      const fallbackWidth = Math.min(segmentWidth, runtime.width)
+      const fallbackStart = clamp(playerX - fallbackWidth * 0.5, 0, runtime.width - fallbackWidth)
+      segments.push({
+        start: fallbackStart,
+        end: fallbackStart + fallbackWidth,
+        y: levels[closestLevelIndex],
+        levelIndex: closestLevelIndex,
+        safe: true,
+      })
     }
 
     runtime.groundSegments = segments
@@ -631,6 +706,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.slowActive = false
     runtime.hatBursts = []
     runtime.spawnBeacons = []
+    runtime.tokens = []
     runtime.requestReplayCapture = false
     runtime.cameraShake = 0
     runtime.lastEnemySpawnBeat = -1
@@ -759,7 +835,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
   }
 
   /**
-   * Trigger a phase shift and optionally lane-snap during segmented terrain.
+   * Trigger a phase shift.
    */
   function handlePhase() {
     startAudio()
@@ -778,35 +854,37 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     audioEngine.setSlapMix(0.9)
     audioEngine.playSfx('phase', 0.9)
 
-    if (runtime.groundMode === 'segmented-y') {
-      const playerBottomY = runtime.player.y + runtime.player.height
-      const adjacentLaneY = getAdjacentLaneY(
-        runtime.groundSegments,
-        runtime.player.x,
-        runtime.player.width,
-        playerBottomY,
-      )
-
-      if (adjacentLaneY !== null) {
-        // Snap vertically without affecting horizontal momentum.
-        runtime.player.y = adjacentLaneY - runtime.player.height
-        runtime.player.vy = 0
-        runtime.player.onGround = true
-        runtime.jumpStartY = runtime.player.y
-        runtime.jumpApexY = runtime.player.y
-
-        // Short invulnerability buffer to prevent immediate collision on lane swap.
-        runtime.graceUsed = true
-        runtime.invulnTimer = Math.max(runtime.invulnTimer, 0.45)
-      }
-    }
-
     runtime.sonicBursts.push({
       x: runtime.player.x + runtime.player.width / 2,
       y: runtime.player.y + runtime.player.height / 2,
       r: 0,
       alpha: 1,
     })
+  }
+
+  function handleLaneChange(direction: 'up' | 'down') {
+    startAudio()
+    if (ui.gameOver.value) return
+    if (!ui.started.value && !ui.gameOver.value) {
+      beginRun()
+    }
+    if (runtime.groundMode !== 'segmented-y') return
+
+    const playerBottomY = runtime.player.y + runtime.player.height
+    const targetLaneY = getLaneYByDirection(
+      runtime.groundSegments,
+      runtime.player.x,
+      runtime.player.width,
+      playerBottomY,
+      direction,
+    )
+
+    if (targetLaneY == null) return
+    runtime.player.y = targetLaneY - runtime.player.height
+    runtime.player.vy = 0
+    runtime.player.onGround = true
+    runtime.jumpStartY = runtime.player.y
+    runtime.jumpApexY = runtime.player.y
   }
 
   function handleBlast() {
@@ -1059,9 +1137,11 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     )
 
     const intensityWindow = runtime.intensityWindow
+    const developerSegmented = ui.developerMode.value
     // Switch ground segmentation only once the active window has meaningfully started.
     const shouldSegmentGround =
-      intensityWindow?.phase === 'active' && intensityWindow.progress >= 0.25
+      developerSegmented ||
+      (intensityWindow?.phase === 'active' && intensityWindow.progress >= 0.25)
     // TODO: Add unit coverage once the update loop is refactored for deterministic testing.
     if (shouldSegmentGround && runtime.groundMode !== 'segmented-y') {
       runtime.groundMode = 'segmented-y'
@@ -1240,7 +1320,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     const effectiveGravity = runtime.hangActive ? runtime.gravity * 0.035 : runtime.gravity
 
     runtime.scrollSpeed = runtime.baseScrollSpeed * ui.speed.value * timeScale
-    rebuildGroundSegments(runtime.intensityWindow)
+    rebuildGroundSegments(runtime.intensityWindow, developerSegmented)
     const playerBottomBeforeMove = runtime.player.y + runtime.player.height
     const supportingGroundBeforeMove = getSupportingGroundSegment(
       runtime.groundSegments,
@@ -1291,12 +1371,67 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       }
     }
 
+    if (runtime.groundMode === 'segmented-y') {
+      for (const e of runtime.enemies) {
+        if (!e.alive || e.squished) continue
+        if (e.falling) continue
+        if (e.laneIndex == null || e.laneIndex === 0) continue
+        const hasSafeLane = runtime.groundSegments.some(
+          (seg) =>
+            seg.safe &&
+            seg.levelIndex === e.laneIndex &&
+            e.x + e.width > seg.start &&
+            e.x < seg.end,
+        )
+        if (!hasSafeLane) {
+          e.falling = true
+          e.fallVy = Math.max(0, e.fallVy ?? 0)
+          e.fallSpin = (Math.random() > 0.5 ? 1 : -1) * (0.6 + Math.random() * 0.8)
+        }
+      }
+    }
+
+    for (const e of runtime.enemies) {
+      if (!e.falling || !e.alive || e.squished) continue
+      e.fallVy = (e.fallVy ?? 0) + runtime.gravity * 0.55 * dtRaw
+      e.y += e.fallVy * dtRaw
+      e.fallSpin = (e.fallSpin ?? 0) * 0.98
+      if (e.y >= runtime.groundY - e.height) {
+        e.y = runtime.groundY - e.height
+        e.falling = false
+        e.fallVy = 0
+        e.fallSpin = 0
+        e.laneIndex = 0
+      }
+    }
+
     const pad = 6
     const playerHitbox = {
       x: runtime.player.x + pad,
       y: runtime.player.y + pad,
       w: runtime.player.width - pad * 2,
       h: runtime.player.height - pad * 2,
+    }
+
+    for (const token of runtime.tokens) {
+      token.x -= runtime.scrollSpeed * 0.95 * dt
+    }
+    for (let i = runtime.tokens.length - 1; i >= 0; i--) {
+      const token = runtime.tokens[i]
+      if (token.x + token.r < 0) {
+        runtime.tokens.splice(i, 1)
+        continue
+      }
+      if (
+        token.x + token.r > playerHitbox.x &&
+        token.x - token.r < playerHitbox.x + playerHitbox.w &&
+        token.y + token.r > playerHitbox.y &&
+        token.y - token.r < playerHitbox.y + playerHitbox.h
+      ) {
+        ui.tokens.value += token.value
+        persistTokens(ui)
+        runtime.tokens.splice(i, 1)
+      }
     }
 
     for (const e of runtime.enemies) {
@@ -1684,7 +1819,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     drawWorld(ctx, runtime, ui, palette, runtime.intensityWindow)
     drawHatBursts(ctx, runtime, palette)
     drawDash(ctx, runtime)
-    drawAudioVisualizer(ctx, runtime, palette)
+    drawAudioVisualizer(ctx, runtime, palette, ui)
+    drawTokens(ctx, runtime, palette)
     drawPlayer(ctx, runtime, ui, palette)
     drawShockwaves(ctx, runtime)
     drawSonicBursts(ctx, runtime)
@@ -1747,6 +1883,14 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     if (matchesKey('blast', e.code, keybinds)) {
       e.preventDefault()
       handleBlast()
+    }
+    if (matchesKey('laneUp', e.code, keybinds)) {
+      e.preventDefault()
+      handleLaneChange('up')
+    }
+    if (matchesKey('laneDown', e.code, keybinds)) {
+      e.preventDefault()
+      handleLaneChange('down')
     }
     if (matchesKey('phase', e.code, keybinds)) {
       e.preventDefault()
