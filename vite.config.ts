@@ -1,4 +1,3 @@
-
 import { fileURLToPath, URL } from 'node:url'
 
 import { defineConfig } from 'vite'
@@ -8,13 +7,13 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 
 export default defineConfig({
   server: {
-    host: '0.0.0.0',         // IMPORTANT: not just `true`
+    host: '0.0.0.0', // IMPORTANT: not just `true`
     port: 5173,
     strictPort: true,
 
     allowedHosts: [
       'makeda-panoptic-chartographically.ngrok-free.dev',
-      '.ngrok-free.dev',     // leading dot = wildcard in older Vite
+      '.ngrok-free.dev', // leading dot = wildcard in older Vite
     ],
 
     hmr: {
@@ -23,11 +22,7 @@ export default defineConfig({
     },
   },
 
-  plugins: [
-    vue(),
-    vueJsx(),
-    vueDevTools(),
-  ],
+  plugins: [vue(), vueJsx(), vueDevTools()],
 
   resolve: {
     alias: {
@@ -35,4 +30,3 @@ export default defineConfig({
     },
   },
 })
-
