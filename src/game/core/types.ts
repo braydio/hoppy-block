@@ -60,6 +60,7 @@ export interface TokenPickup {
   r: number
   value: number
   laneIndex: number
+  kind?: 'currency' | 'camera-rotate'
 }
 
 /**

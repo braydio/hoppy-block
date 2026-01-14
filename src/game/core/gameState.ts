@@ -152,6 +152,10 @@ export interface GameRuntime {
   }>
   player: Player
   cameraShake: number
+  cameraMode: 'runner' | 'topdown'
+  cameraTransition: { t: number; duration: number } | null
+  topdownPlanned: boolean
+  topdownTokenSpawned: boolean
   requestReplayCapture?: boolean
   comboGraceTimer?: number
   powerTint: { r: number; g: number; b: number; alpha: number }
@@ -382,6 +386,10 @@ export function createGameState(): GameState {
       onGround: true,
     },
     cameraShake: 0,
+    cameraMode: 'runner',
+    cameraTransition: null,
+    topdownPlanned: false,
+    topdownTokenSpawned: false,
     requestReplayCapture: false,
     comboGraceTimer: 0,
     powerTint: { r: 0, g: 0, b: 0, alpha: 0 },

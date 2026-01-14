@@ -173,6 +173,7 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
   }
 
   function spawnObstacle(options?: { nearStart?: boolean }) {
+    if (runtime.cameraMode === 'topdown' || runtime.cameraTransition) return 0
     const minGap = 200
     const widthOptions = [30, 40, 50]
     const chosenWidth = widthOptions[Math.floor(Math.random() * widthOptions.length)] ?? 40
@@ -207,6 +208,7 @@ export function createSpawnSystem(runtime: GameRuntime, ui: UiState) {
       r: 7,
       value: 1,
       laneIndex,
+      kind: 'currency' as const,
     }
     runtime.tokens.push(token)
     return 1

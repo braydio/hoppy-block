@@ -14,6 +14,7 @@ export type SfxName =
   | 'combo'
   | 'death'
   | 'blast'
+  | 'modeToken'
 
 // audioEngine.ts
 export function createAudioEngine() {
@@ -388,6 +389,11 @@ export function createAudioEngine() {
       case 'blast':
         playTone(360, 620, 0.14, 'sawtooth', 0.8)
         playNoiseBurst(0.12, 1400, 0.2)
+        break
+      case 'modeToken':
+        playTone(980, 1280, 0.12, 'triangle', 0.75)
+        playTone(240, 720, 0.22, 'sawtooth', 0.35)
+        playNoiseBurst(0.16, 1900, 0.25)
         break
     }
   }

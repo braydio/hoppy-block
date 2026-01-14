@@ -75,19 +75,58 @@ export function drawTokens(ctx: CanvasRenderingContext2D, runtime: GameRuntime, 
   if (runtime.tokens.length === 0) return
   for (const token of runtime.tokens) {
     ctx.save()
-    ctx.globalAlpha = 0.9
+    const isCameraToken = token.kind === 'camera-rotate'
+    ctx.globalAlpha = isCameraToken ? 0.95 : 0.9
     ctx.translate(token.x, token.y)
-    ctx.rotate(Math.PI * 0.25)
-    ctx.fillStyle = palette.beat
-    ctx.shadowColor = palette.beat
-    ctx.shadowBlur = 8
     const size = token.r * 2
-    ctx.fillRect(-size / 2, -size / 2, size, size)
-    ctx.shadowBlur = 0
-    ctx.globalAlpha = 0.35
-    ctx.strokeStyle = '#0f172a'
-    ctx.lineWidth = 2
-    ctx.strokeRect(-size / 2, -size / 2, size, size)
+    const spin = performance.now() * 0.004
+
+    if (isCameraToken) {
+      ctx.rotate(spin)
+      const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 1.6)
+      glow.addColorStop(0, withAlpha('#facc15', 0.95))
+      glow.addColorStop(0.5, withAlpha('#38bdf8', 0.35))
+      glow.addColorStop(1, withAlpha('#0ea5e9', 0))
+      ctx.fillStyle = glow
+      ctx.beginPath()
+      ctx.arc(0, 0, size * 1.35, 0, Math.PI * 2)
+      ctx.fill()
+
+      ctx.shadowColor = '#facc15'
+      ctx.shadowBlur = 14
+      ctx.fillStyle = '#facc15'
+      ctx.beginPath()
+      ctx.moveTo(0, -size * 0.7)
+      ctx.lineTo(size * 0.7, 0)
+      ctx.lineTo(0, size * 0.7)
+      ctx.lineTo(-size * 0.7, 0)
+      ctx.closePath()
+      ctx.fill()
+
+      ctx.shadowBlur = 0
+      ctx.strokeStyle = withAlpha('#0f172a', 0.55)
+      ctx.lineWidth = 2
+      ctx.stroke()
+
+      ctx.rotate(-spin * 1.6)
+      ctx.globalAlpha *= 0.85
+      ctx.strokeStyle = withAlpha('#38bdf8', 0.9)
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.arc(0, 0, size * 0.48, 0, Math.PI * 2)
+      ctx.stroke()
+    } else {
+      ctx.rotate(Math.PI * 0.25)
+      ctx.fillStyle = palette.beat
+      ctx.shadowColor = palette.beat
+      ctx.shadowBlur = 8
+      ctx.fillRect(-size / 2, -size / 2, size, size)
+      ctx.shadowBlur = 0
+      ctx.globalAlpha = 0.35
+      ctx.strokeStyle = '#0f172a'
+      ctx.lineWidth = 2
+      ctx.strokeRect(-size / 2, -size / 2, size, size)
+    }
     ctx.restore()
   }
 }

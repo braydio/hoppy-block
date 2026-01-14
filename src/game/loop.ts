@@ -62,6 +62,7 @@ import {
 } from './render/drawEffects'
 import { drawPlayer } from './render/drawPlayer'
 import { drawEnemies } from './render/drawEnemies'
+import { Easing } from './render/playerAnimation'
 import { persistTokens } from './core/gameState'
 import type { GameState } from './core/gameState'
 import type { GroundSegment } from './core/types'
@@ -89,7 +90,7 @@ export function getSupportingGroundSegment(
     segments.find((seg) => {
       if (!seg.safe) return false
       const overlapsHorizontally = x + width > seg.start && x < seg.end
-      const alignedVertically = playerBottomY >= seg.y - epsilon
+      const alignedVertically = playerBottomY >= seg.y - epsilon && playerBottomY <= seg.y + epsilon
       return overlapsHorizontally && alignedVertically
     }) ?? null
   )
@@ -379,6 +380,67 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     }
     runtime.intensityWindow = null
     return null
+  }
+
+  function decideTopdownMode() {
+    runtime.cameraMode = 'runner'
+    runtime.cameraTransition = null
+    runtime.topdownTokenSpawned = false
+
+    const map = audioEngine.levelMap
+    if (!map || map.beatIntensities.length === 0 || LANE_OFFSETS.length < 2) {
+      runtime.topdownPlanned = false
+      return
+    }
+
+    const avgIntensity =
+      map.beatIntensities.reduce((sum, v) => sum + (v ?? 0), 0) /
+      Math.max(1, map.beatIntensities.length)
+    const chance = clamp(0.06 + avgIntensity * 0.06, 0.04, 0.12)
+    runtime.topdownPlanned = Math.random() < chance
+  }
+
+  function spawnTopdownToken() {
+    if (!ui.started.value || ui.gameOver.value) return
+    const planned = runtime.topdownPlanned || ui.developerMode.value
+    if (!planned || runtime.topdownTokenSpawned) return
+    if (runtime.cameraMode !== 'runner' || runtime.cameraTransition) return
+    if (runtime.groundMode !== 'segmented-y') return
+
+    const laneIndex = Math.max(0, LANE_OFFSETS.length - 1)
+    const hasSafeLaneAtPlayerX = runtime.groundSegments.some(
+      (seg) =>
+        seg.safe &&
+        seg.levelIndex === laneIndex &&
+        runtime.player.x + runtime.player.width > seg.start &&
+        runtime.player.x < seg.end,
+    )
+    if (!hasSafeLaneAtPlayerX) return
+
+    const laneY = runtime.groundY + (LANE_OFFSETS[laneIndex] ?? 0)
+    runtime.tokens.push({
+      x: runtime.width + 70,
+      y: laneY - 50,
+      r: 9,
+      value: 0,
+      laneIndex,
+      kind: 'camera-rotate',
+    })
+    runtime.topdownTokenSpawned = true
+  }
+
+  function startTopdownCamera() {
+    if (runtime.cameraMode === 'topdown' || runtime.cameraTransition) return
+    runtime.cameraTransition = { t: 0, duration: 1.05 }
+    runtime.flashTimer = Math.max(runtime.flashTimer, 0.12)
+    runtime.flashColor = '250, 204, 21'
+    audioEngine.playSfx('modeToken', 0.9)
+    runtime.shockwaves.push({
+      x: runtime.player.x + runtime.player.width / 2,
+      y: runtime.player.y + runtime.player.height / 2,
+      alpha: 0.75,
+      intense: true,
+    })
   }
 
   /**
@@ -693,6 +755,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.intensityPeakActive = false
     runtime.airControlTightened = false
     runtime.groundMode = 'flat'
+    decideTopdownMode()
     refreshAirDefaults()
     ui.introCollapsing.value = false
     ui.started.value = false
@@ -751,6 +814,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.timeData = audioEngine.timeData
     ui.bpm.value = audioEngine.bpm
     deriveIntensityWindow()
+    decideTopdownMode()
   }
 
   async function loadDefaultAudio() {
@@ -766,6 +830,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       runtime.timeData = audioEngine.timeData
       ui.bpm.value = audioEngine.bpm
       deriveIntensityWindow()
+      decideTopdownMode()
     } catch (err) {
       console.warn('Default track unavailable, waiting for user upload.', err)
     }
@@ -969,9 +1034,24 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
    *
    * @param dtRaw Delta time in seconds since the previous frame.
    */
-  function update(dtRaw: number) {
-    const dt = dtRaw
+  function update(dtReal: number) {
     ensureReplayRecorder(runtime)
+
+    if (runtime.cameraTransition) {
+      const transition = runtime.cameraTransition
+      transition.t = Math.min(transition.duration, transition.t + dtReal)
+      const progress = transition.duration > 0 ? transition.t / transition.duration : 1
+      if (progress >= 1) {
+        runtime.cameraTransition = null
+        runtime.cameraMode = 'topdown'
+        runtime.groundMode = 'segmented-y'
+        runtime.obstacles = []
+      }
+    }
+
+    const cameraFrozen = runtime.cameraTransition != null
+    const dtRaw = cameraFrozen ? 0 : dtReal
+    const dt = dtRaw
     audioEngine.setDebugTimelineEnabled(ui.debugAudioSpawnView.value)
     const beatMs = 60000 / audioEngine.bpm
     const now = performance.now()
@@ -1138,9 +1218,11 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
 
     const intensityWindow = runtime.intensityWindow
     const developerSegmented = ui.developerMode.value
+    const forcedSegmented =
+      developerSegmented || runtime.cameraMode === 'topdown' || runtime.cameraTransition != null
     // Switch ground segmentation only once the active window has meaningfully started.
     const shouldSegmentGround =
-      developerSegmented ||
+      forcedSegmented ||
       (intensityWindow?.phase === 'active' && intensityWindow.progress >= 0.25)
     // TODO: Add unit coverage once the update loop is refactored for deterministic testing.
     if (shouldSegmentGround && runtime.groundMode !== 'segmented-y') {
@@ -1256,7 +1338,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
           ui.beatPulse.value = false
         }, 90)
 
-        if (ui.started.value && !ui.gameOver.value) {
+        if (ui.started.value && !ui.gameOver.value && !cameraFrozen) {
           spawns.pulseEnemiesOnBeat(1 + intensity * 0.6)
           spawns.spawnBeatDrivenEntities(false, {
             bass: audioEngine.bass,
@@ -1274,7 +1356,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
 
       while (now - runtime.lastSubBeatTime >= subBeatMs) {
         runtime.lastSubBeatTime += subBeatMs
-        if (ui.started.value && !ui.gameOver.value) {
+        if (ui.started.value && !ui.gameOver.value && !cameraFrozen) {
           spawns.pulseEnemiesOnBeat(0.45 + intensity * 0.3)
           spawns.spawnBeatDrivenEntities(true, {
             bass: audioEngine.bass,
@@ -1320,7 +1402,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     const effectiveGravity = runtime.hangActive ? runtime.gravity * 0.035 : runtime.gravity
 
     runtime.scrollSpeed = runtime.baseScrollSpeed * ui.speed.value * timeScale
-    rebuildGroundSegments(runtime.intensityWindow, developerSegmented)
+    rebuildGroundSegments(runtime.intensityWindow, forcedSegmented)
+    spawnTopdownToken()
     const playerBottomBeforeMove = runtime.player.y + runtime.player.height
     const supportingGroundBeforeMove = getSupportingGroundSegment(
       runtime.groundSegments,
@@ -1418,6 +1501,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     }
     for (let i = runtime.tokens.length - 1; i >= 0; i--) {
       const token = runtime.tokens[i]
+      if (!token) continue
       if (token.x + token.r < 0) {
         runtime.tokens.splice(i, 1)
         continue
@@ -1428,9 +1512,14 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
         token.y + token.r > playerHitbox.y &&
         token.y - token.r < playerHitbox.y + playerHitbox.h
       ) {
+        runtime.tokens.splice(i, 1)
+        if (token.kind === 'camera-rotate') {
+          runtime.topdownPlanned = false
+          startTopdownCamera()
+          continue
+        }
         ui.tokens.value += token.value
         persistTokens(ui)
-        runtime.tokens.splice(i, 1)
       }
     }
 
@@ -1556,6 +1645,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
 
     for (let i = runtime.shockwaves.length - 1; i >= 0; i--) {
       const s = runtime.shockwaves[i]
+      if (!s) continue
       s.w = (s.w || 0) + 1400 * dt * (s.intense ? 1.1 : 0.9)
       s.alpha -= (s.intense ? 1.6 : 1.4) * dt
       if (s.alpha <= 0 || s.w >= runtime.width * 2) runtime.shockwaves.splice(i, 1)
@@ -1563,6 +1653,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
 
     for (let i = runtime.sonicBursts.length - 1; i >= 0; i--) {
       const s = runtime.sonicBursts[i]
+      if (!s) continue
       s.r += 1800 * dt
       s.alpha -= 2.2 * dt
       if (s.alpha <= 0) runtime.sonicBursts.splice(i, 1)
@@ -1808,11 +1899,39 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     const pulse = 20 + audioEngine.bass * 80
     const palette = getPalette(runtime, ui, pulse, audioEngine.intensity, runtime.intensityWindow)
 
+    const transitionProgress = runtime.cameraTransition
+      ? clamp(runtime.cameraTransition.t / Math.max(0.001, runtime.cameraTransition.duration), 0, 1)
+      : runtime.cameraMode === 'topdown'
+        ? 1
+        : 0
+
+    const playerPlaneY =
+      transitionProgress > 0 ? (runtime.player.onGround ? runtime.player.y : runtime.jumpStartY) : runtime.player.y
+    const focusX = runtime.player.x + runtime.player.width / 2
+    const focusY = playerPlaneY + runtime.player.height / 2
+
+    const posT = Easing.easeInOutQuad(transitionProgress)
+    const rotT = Easing.easeOutBack(transitionProgress)
+    const zoomT = Easing.easeOutQuad(transitionProgress)
+
+    const targetScreenX = runtime.width * 0.5
+    const targetScreenY = runtime.height * 0.68
+    const cameraX = lerp(focusX, targetScreenX, posT)
+    const cameraY = lerp(focusY, targetScreenY, posT)
+    const cameraRotation = lerp(0, -Math.PI / 2, rotT)
+    const cameraZoom = lerp(1, 1.06, zoomT)
+
     ctx.save()
-    if (runtime.cameraShake > 0.05) {
+    ctx.translate(cameraX, cameraY)
+    ctx.rotate(cameraRotation)
+    ctx.scale(cameraZoom, cameraZoom)
+    ctx.translate(-focusX, -focusY)
+
+    const shakeStrength = runtime.cameraShake * (transitionProgress > 0 ? 0.25 : 1)
+    if (shakeStrength > 0.05) {
       ctx.translate(
-        (Math.random() - 0.5) * runtime.cameraShake,
-        (Math.random() - 0.5) * runtime.cameraShake,
+        ((Math.random() - 0.5) * shakeStrength) / cameraZoom,
+        ((Math.random() - 0.5) * shakeStrength) / cameraZoom,
       )
     }
 
@@ -1821,7 +1940,15 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     drawDash(ctx, runtime)
     drawAudioVisualizer(ctx, runtime, palette, ui)
     drawTokens(ctx, runtime, palette)
-    drawPlayer(ctx, runtime, ui, palette)
+    if (transitionProgress > 0) {
+      const jumpLift = Math.max(0, playerPlaneY - runtime.player.y)
+      ctx.save()
+      ctx.translate(0, -jumpLift * 0.85)
+      drawPlayer(ctx, runtime, ui, palette, undefined, { y: playerPlaneY })
+      ctx.restore()
+    } else {
+      drawPlayer(ctx, runtime, ui, palette)
+    }
     drawShockwaves(ctx, runtime)
     drawSonicBursts(ctx, runtime)
     drawScorePops(ctx, runtime)

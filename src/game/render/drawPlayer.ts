@@ -7,6 +7,8 @@ import type { PlayerAnimationState } from './playerAnimation'
 import { getShakeOffset, Easing } from './playerAnimation'
 import { withAlpha } from './colors'
 
+export type PlayerRenderOverrides = { x?: number; y?: number }
+
 /**
  * Draw the player with full animation support
  */
@@ -16,21 +18,26 @@ export function drawPlayer(
   ui: UiState,
   palette: Palette,
   anim?: PlayerAnimationState,
+  overrides?: PlayerRenderOverrides,
 ) {
   // Fallback for when animation state isn't provided
   if (!anim) {
-    drawPlayerLegacy(ctx, runtime, ui, palette)
+    drawPlayerLegacy(ctx, runtime, ui, palette, overrides)
     return
   }
 
   const shake = getShakeOffset(anim)
+  const playerX = overrides?.x ?? runtime.player.x
+  const playerY = overrides?.y ?? runtime.player.y
+  const centerX = playerX + runtime.player.width / 2
+  const centerY = playerY + runtime.player.height / 2
 
   // Draw trail particles first (behind player)
   drawTrailParticles(ctx, anim)
 
   // Calculate final transforms
-  const baseX = runtime.player.x + runtime.player.width / 2 + shake.x
-  const baseY = runtime.player.y + runtime.player.height / 2 + shake.y
+  const baseX = centerX + shake.x
+  const baseY = centerY + shake.y
 
   ctx.save()
   ctx.translate(baseX, baseY)
@@ -58,12 +65,12 @@ export function drawPlayer(
 
   // Draw invulnerability shield
   if (runtime.invulnTimer > 0) {
-    drawInvulnShield(ctx, runtime, anim)
+    drawInvulnShield(ctx, runtime, anim, centerX, centerY)
   }
 
   // Draw death explosion
   if (ui.gameOver.value && runtime.deathByEnemy) {
-    drawDeathExplosion(ctx, runtime, anim)
+    drawDeathExplosion(ctx, runtime, anim, centerX, centerY)
   }
 
   // Draw fragments
@@ -422,11 +429,10 @@ function drawInvulnShield(
   ctx: CanvasRenderingContext2D,
   runtime: GameRuntime,
   anim: PlayerAnimationState,
+  centerX: number,
+  centerY: number,
 ): void {
   ctx.save()
-
-  const centerX = runtime.player.x + runtime.player.width / 2
-  const centerY = runtime.player.y + runtime.player.height / 2
   const radius = Math.max(runtime.player.width, runtime.player.height) * 0.8
 
   // Pulsing alpha
@@ -466,10 +472,9 @@ function drawDeathExplosion(
   ctx: CanvasRenderingContext2D,
   runtime: GameRuntime,
   anim: PlayerAnimationState,
+  centerX: number,
+  centerY: number,
 ): void {
-  const centerX = runtime.player.x + runtime.player.width / 2
-  const centerY = runtime.player.y + runtime.player.height / 2
-
   ctx.save()
   ctx.translate(centerX, centerY)
 
@@ -534,6 +539,7 @@ function drawPlayerLegacy(
   runtime: GameRuntime,
   ui: UiState,
   palette: Palette,
+  overrides?: PlayerRenderOverrides,
 ) {
   // ... your original drawPlayer code here for fallback
   const basePlayerColor = palette.player
@@ -554,12 +560,11 @@ function drawPlayerLegacy(
   const prepSquishX = preppingDash ? 1.12 + squishEase * 0.05 : 1
   const playerSquishY = prepSquishY * dashSquish
   const playerSquishX = prepSquishX * dashStretch
+  const playerX = overrides?.x ?? runtime.player.x
+  const playerY = overrides?.y ?? runtime.player.y
 
   ctx.save()
-  ctx.translate(
-    runtime.player.x + runtime.player.width / 2,
-    runtime.player.y + runtime.player.height / 2,
-  )
+  ctx.translate(playerX + runtime.player.width / 2, playerY + runtime.player.height / 2)
   ctx.rotate(runtime.rotation)
   ctx.scale(playerSquishX, playerSquishY)
   ctx.fillStyle = playerColor
