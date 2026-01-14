@@ -3,7 +3,8 @@ import type { GameRuntime, UiState } from '../core/gameState'
 import type { Palette } from './types'
 import { clamp } from '../systems/physicsSystem'
 import { SLIDE_CROUCH_DURATION } from '../core/constants'
-import { PlayerAnimationState, getShakeOffset, Easing } from './playerAnimation'
+import type { PlayerAnimationState } from './playerAnimation'
+import { getShakeOffset, Easing } from './playerAnimation'
 import { withAlpha } from './colors'
 
 /**
