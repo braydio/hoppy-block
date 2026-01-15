@@ -573,10 +573,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
    * @param windowState Active intensity window state.
    */
   // TODO: Add unit coverage for segmented ground generation; currently exercised in the live loop.
-  function rebuildGroundSegments(
-    windowState: IntensityWindowState | null,
-    forceSegmented = false,
-  ) {
+  function rebuildGroundSegments(windowState: IntensityWindowState | null, forceSegmented = false) {
     const beatSeconds = 60 / Math.max(1, ui.bpm.value)
     const quarterBeatSeconds = beatSeconds / 4
     const baseSpacing = Math.max(48, runtime.scrollSpeed * quarterBeatSeconds)
@@ -1222,8 +1219,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       developerSegmented || runtime.cameraMode === 'topdown' || runtime.cameraTransition != null
     // Switch ground segmentation only once the active window has meaningfully started.
     const shouldSegmentGround =
-      forcedSegmented ||
-      (intensityWindow?.phase === 'active' && intensityWindow.progress >= 0.25)
+      forcedSegmented || (intensityWindow?.phase === 'active' && intensityWindow.progress >= 0.25)
     // TODO: Add unit coverage once the update loop is refactored for deterministic testing.
     if (shouldSegmentGround && runtime.groundMode !== 'segmented-y') {
       runtime.groundMode = 'segmented-y'
@@ -1906,7 +1902,11 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
         : 0
 
     const playerPlaneY =
-      transitionProgress > 0 ? (runtime.player.onGround ? runtime.player.y : runtime.jumpStartY) : runtime.player.y
+      transitionProgress > 0
+        ? runtime.player.onGround
+          ? runtime.player.y
+          : runtime.jumpStartY
+        : runtime.player.y
     const focusX = runtime.player.x + runtime.player.width / 2
     const focusY = playerPlaneY + runtime.player.height / 2
 
