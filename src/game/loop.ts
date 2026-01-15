@@ -1648,11 +1648,11 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     }
 
     for (let i = runtime.sonicBursts.length - 1; i >= 0; i--) {
-      const s = runtime.sonicBursts[i]
-      if (!s) continue
-      s.r += 1800 * dt
-      s.alpha -= 2.2 * dt
-      if (s.alpha <= 0) runtime.sonicBursts.splice(i, 1)
+      const burst = runtime.sonicBursts[i]
+      if (!burst) continue
+      burst.r += 1800 * dt
+      burst.alpha -= 2.2 * dt
+      if (burst.alpha <= 0) runtime.sonicBursts.splice(i, 1)
     }
 
     for (let i = runtime.spawnBeacons.length - 1; i >= 0; i--) {
