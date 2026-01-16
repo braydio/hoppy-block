@@ -1966,16 +1966,23 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     })
   }
 
-  function loop(timestamp: number) {
-    if (!runtime.lastTimestamp) runtime.lastTimestamp = timestamp
-    const frameDt = (timestamp - runtime.lastTimestamp) / 1000
-    const dt = Math.min(frameDt, 0.05)
-    runtime.lastTimestamp = timestamp
+function gameLoop(runtime, deltaTime) {
+  // --- Continuous collision setup ---
+  // Preserve previous player Y position for ground-crossing detection
+  if (runtime.player) {
+    runtime.player.prevY = runtime.player.y;
+  }
 
-    if (!ui.paused.value) update(dt)
-    draw()
+function loop(timestamp: number) {
+  if (!runtime.lastTimestamp) runtime.lastTimestamp = timestamp
+  const frameDt = (timestamp - runtime.lastTimestamp) / 1000
+  const dt = Math.min(frameDt, 0.05)
+  runtime.lastTimestamp = timestamp
 
-    runtime.animationId = requestAnimationFrame(loop)
+  if (!ui.paused.value) update(dt)
+  draw()
+
+  runtime.animationId = requestAnimationFrame(loop)
   }
 
   function handleClick() {
@@ -2189,6 +2196,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       spawnTicks: runtime.spawnDebugTicks,
       laneHistory: runtime.laneDebugHistory,
       currentTime: audioEngine.audio?.currentTime ?? 0,
-    }),
+    })
   }
 }
+
