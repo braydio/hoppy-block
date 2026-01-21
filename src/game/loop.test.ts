@@ -9,9 +9,13 @@ describe('getSupportingGroundSegment', () => {
   ]
 
   it('requires horizontal overlap and vertical alignment', () => {
-    expect(getSupportingGroundSegment(segments, 20, 40, 300, 4)).toEqual(segments[0])
-    expect(getSupportingGroundSegment(segments, 20, 40, 310, 4)).toBeNull()
-    expect(getSupportingGroundSegment(segments, 230, 40, 340, 4)).toBeNull()
+    expect(getSupportingGroundSegment(segments, 20, 40, 296, 300, 4)).toEqual(segments[0])
+    expect(getSupportingGroundSegment(segments, 20, 40, 300, 310, 4)).toBeNull()
+    expect(getSupportingGroundSegment(segments, 230, 40, 340, 340, 4)).toBeNull()
+  })
+
+  it('detects continuous ground crossings', () => {
+    expect(getSupportingGroundSegment(segments, 20, 40, 290, 302, 4)).toEqual(segments[0])
   })
 })
 

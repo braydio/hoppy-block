@@ -11,7 +11,7 @@ src/
 │ ├─ systems/
 │ │ ├─ audioEngine.ts // Web Audio + analyser + BPM + energy
 │ │ ├─ beatSystem.ts // beat timing, windows, streaks
-│ │ ├─ physicsSystem.ts // gravity, movement, collisions
+│ │ ├─ physicsSystem.ts // gravity helpers, movement, collision utilities
 │ │ ├─ spawnSystem.ts // enemies, formations, obstacles
 │ │ ├─ combatSystem.ts // slam, blast, parry logic
 │ │ └─ replaySystem.ts // MediaRecorder buffer & replay

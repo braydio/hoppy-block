@@ -39,6 +39,7 @@ Rhythm runner where you surf the beat, jump gaps, and slam enemies for charge an
 - Phase terrain to bypass walls; phase enemy types to ghost through them.
 - Dash when the beat glow appears to maximize range and score.
 - Slide to clear low enemies; chain into a jump to keep your combo alive.
+- Fast drops will still snap you onto safe platforms, so commit to the landing instead of hesitating.
 
 ## Music & Beat Sync
 

@@ -2,7 +2,7 @@
  * Main game loop: orchestrates audio sync, input handling, physics updates, rendering,
  * and spawn timing for the rhythm runner.
  */
-import { clamp, lerp } from './systems/physicsSystem'
+import { clamp, detectGroundContact, integratePlayerPhysics, lerp } from './systems/physicsSystem'
 import { createSpawnSystem, applyDifficultySettings } from './systems/spawnSystem'
 import { isOnBeat, registerBeatAction } from './systems/beatSystem'
 import {
@@ -32,11 +32,15 @@ import {
   SLIDE_DASH_DURATION,
   SLIDE_GLIDE_DURATION,
   SLIDE_FLIP_DURATION,
+  SLIDE_GROUND_LOCK_DURATION,
   PHASE_DURATION,
   PHASE_COST,
   PHASE_COOLDOWN,
   DOUBLE_JUMP_COST,
   INTENSE_SLAM_HEIGHT,
+  GROUND_ALIGN_EPSILON,
+  CAMERA_SHAKE_DECAY,
+  AIR_CONTROL_HEIGHT_RATIO,
   CHARGE_DRAIN_RATE,
   CHARGE_REGEN_GROUND,
   CHARGE_REGEN_AIR,
@@ -67,15 +71,14 @@ import { persistTokens } from './core/gameState'
 import type { GameState } from './core/gameState'
 import type { GroundSegment } from './core/types'
 
-const GROUND_ALIGN_EPSILON = 6
-
 /**
  * Return the ground segment that currently supports the player, if any.
  *
  * @param segments Ground spans to scan.
  * @param x Player x position.
  * @param width Player width.
- * @param playerBottomY Player bottom y position.
+ * @param prevBottomY Player bottom y position before movement.
+ * @param currBottomY Player bottom y position after movement.
  * @param epsilon Vertical snap tolerance in pixels.
  * @returns Overlapping ground span or null when above a gap.
  */
@@ -83,15 +86,18 @@ export function getSupportingGroundSegment(
   segments: GroundSegment[],
   x: number,
   width: number,
-  playerBottomY: number,
+  prevBottomY: number,
+  currBottomY: number,
   epsilon = GROUND_ALIGN_EPSILON,
 ): GroundSegment | null {
   return (
     segments.find((seg) => {
       if (!seg.safe) return false
       const overlapsHorizontally = x + width > seg.start && x < seg.end
-      const alignedVertically = playerBottomY >= seg.y - epsilon && playerBottomY <= seg.y + epsilon
-      return overlapsHorizontally && alignedVertically
+      const alignedVertically = Math.abs(currBottomY - seg.y) <= epsilon
+      const crossedGround = detectGroundContact(prevBottomY, currBottomY, seg.y, epsilon)
+      const grounded = alignedVertically || crossedGround
+      return overlapsHorizontally && grounded
     }) ?? null
   )
 }
@@ -308,6 +314,11 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     'Squire to spire!',
   ] as const
   const leadInLookaheadSeconds = 10
+  const cameraEase = {
+    position: Easing.easeInOutQuad,
+    rotation: Easing.easeOutBack,
+    zoom: Easing.easeOutQuad,
+  }
 
   /**
    * Reset cached air-movement defaults to the current runtime baselines.
@@ -451,7 +462,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
   function applyLeadInAirtime(beatMs: number) {
     const targetDuration = clamp(beatMs / 4 / 1000, 0.08, 0.35)
     const baseHeight = (Math.abs(baseJumpVelocity) * Math.abs(baseJumpVelocity)) / (2 * baseGravity)
-    const targetHeight = Math.max(40, baseHeight * 0.45)
+    const targetHeight = Math.max(40, baseHeight * AIR_CONTROL_HEIGHT_RATIO)
     const jumpMagnitude = (4 * targetHeight) / targetDuration
     const gravityTarget = (8 * targetHeight) / (targetDuration * targetDuration)
     const clampedGravity = clamp(gravityTarget, baseGravity * 1.8, baseGravity * 12)
@@ -1108,6 +1119,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
         runtime.player.x,
         runtime.player.width,
         playerBottomY,
+        playerBottomY,
       )
       return supportingSegment?.y ?? runtime.groundY
     })()
@@ -1210,7 +1222,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       ui.started.value && !ui.gameOver.value
         ? (ui.beatPulse.value ? audioEngine.bass * 2 : 0) + intensity * 0.6
         : 0,
-      0.16,
+      CAMERA_SHAKE_DECAY,
     )
 
     const intensityWindow = runtime.intensityWindow
@@ -1406,6 +1418,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       runtime.player.x,
       runtime.player.width,
       playerBottomBeforeMove,
+      playerBottomBeforeMove,
     )
     const snapGroundYBeforeMove =
       runtime.groundMode === 'segmented-y' && supportingGroundBeforeMove
@@ -1415,11 +1428,10 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     const lockSlideOnGround =
       supportingGroundBeforeMove &&
       runtime.slideActive &&
-      runtime.slideElapsed < SLIDE_CROUCH_DURATION + SLIDE_DASH_DURATION
+      runtime.slideElapsed < SLIDE_GROUND_LOCK_DURATION
     if (!lockSlideOnGround) {
-      runtime.player.vy +=
-        (runtime.isSlamming ? effectiveGravity * 2.5 : effectiveGravity) * dtRaw * timeScale
-      runtime.player.y += runtime.player.vy * dtRaw * timeScale
+      const gravityScale = runtime.isSlamming ? 2.5 : 1
+      integratePlayerPhysics(runtime.player, effectiveGravity, dtRaw, timeScale, gravityScale)
     } else {
       runtime.player.vy = 0
       runtime.player.y = snapGroundYBeforeMove - runtime.player.height
@@ -1472,10 +1484,16 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
 
     for (const e of runtime.enemies) {
       if (!e.falling || !e.alive || e.squished) continue
+      const prevY = e.y
       e.fallVy = (e.fallVy ?? 0) + runtime.gravity * 0.55 * dtRaw
       e.y += e.fallVy * dtRaw
       e.fallSpin = (e.fallSpin ?? 0) * 0.98
-      if (e.y >= runtime.groundY - e.height) {
+      const prevBottomY = prevY + e.height
+      const currBottomY = e.y + e.height
+      const grounded =
+        Math.abs(currBottomY - runtime.groundY) <= GROUND_ALIGN_EPSILON ||
+        detectGroundContact(prevBottomY, currBottomY, runtime.groundY, GROUND_ALIGN_EPSILON)
+      if (grounded) {
         e.y = runtime.groundY - e.height
         e.falling = false
         e.fallVy = 0
@@ -1701,6 +1719,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       runtime.groundSegments,
       runtime.player.x,
       runtime.player.width,
+      playerBottomBeforeMove,
       playerBottomAfterMove,
     )
     const snapGroundYAfterMove =
@@ -1910,9 +1929,9 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     const focusX = runtime.player.x + runtime.player.width / 2
     const focusY = playerPlaneY + runtime.player.height / 2
 
-    const posT = Easing.easeInOutQuad(transitionProgress)
-    const rotT = Easing.easeOutBack(transitionProgress)
-    const zoomT = Easing.easeOutQuad(transitionProgress)
+    const posT = cameraEase.position(transitionProgress)
+    const rotT = cameraEase.rotation(transitionProgress)
+    const zoomT = cameraEase.zoom(transitionProgress)
 
     const targetScreenX = runtime.width * 0.5
     const targetScreenY = runtime.height * 0.68
@@ -1966,23 +1985,16 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     })
   }
 
-function gameLoop(runtime, deltaTime) {
-  // --- Continuous collision setup ---
-  // Preserve previous player Y position for ground-crossing detection
-  if (runtime.player) {
-    runtime.player.prevY = runtime.player.y;
-  }
+  function loop(timestamp: number) {
+    if (!runtime.lastTimestamp) runtime.lastTimestamp = timestamp
+    const frameDt = (timestamp - runtime.lastTimestamp) / 1000
+    const dt = Math.min(frameDt, 0.05)
+    runtime.lastTimestamp = timestamp
 
-function loop(timestamp: number) {
-  if (!runtime.lastTimestamp) runtime.lastTimestamp = timestamp
-  const frameDt = (timestamp - runtime.lastTimestamp) / 1000
-  const dt = Math.min(frameDt, 0.05)
-  runtime.lastTimestamp = timestamp
+    if (!ui.paused.value) update(dt)
+    draw()
 
-  if (!ui.paused.value) update(dt)
-  draw()
-
-  runtime.animationId = requestAnimationFrame(loop)
+    runtime.animationId = requestAnimationFrame(loop)
   }
 
   function handleClick() {
@@ -2196,7 +2208,6 @@ function loop(timestamp: number) {
       spawnTicks: runtime.spawnDebugTicks,
       laneHistory: runtime.laneDebugHistory,
       currentTime: audioEngine.audio?.currentTime ?? 0,
-    })
+    }),
   }
 }
-
