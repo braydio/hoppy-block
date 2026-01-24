@@ -2210,4 +2210,6 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       currentTime: audioEngine.audio?.currentTime ?? 0,
     }),
   }
-}
+}}
+
+
