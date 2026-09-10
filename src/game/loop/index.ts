@@ -11,4 +11,3 @@ export function gameLoop(runtime, deltaTime) {
   updateCamera(runtime, deltaTime)
   drawFrame(runtime)
 }
-
