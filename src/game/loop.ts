@@ -692,7 +692,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.groundY = runtime.height - 60
     runtime.gravity = 2600
     runtime.jumpVelocity = -1050
-    runtime.baseScrollSpeed = 440
+    runtime.baseScrollSpeed = isPortraitTouch() ? 350 : 440
     runtime.scrollSpeed = runtime.baseScrollSpeed
     applyDifficultySettings(runtime, ui)
     runtime.lastTimestamp = null
@@ -1997,67 +1997,71 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.animationId = requestAnimationFrame(loop)
   }
 
-  function handleClick() {
-    if (!ui.paused.value) handleJump()
+  type GameAction = 'jump' | 'slam' | 'blast' | 'phase' | 'laneUp' | 'laneDown' | 'antigrav' | 'slowmo' | 'pause' | 'restart'
+
+  function action(action: GameAction, pressed = true) {
+    if (action === 'antigrav' || action === 'slowmo') {
+      if (!pressed || ui.paused.value || ui.gameOver.value) {
+        if (action === 'antigrav') runtime.hangActive = false
+        else runtime.slowActive = false
+        return
+      }
+      if (action === 'antigrav') {
+        if (!runtime.hangActive) audioEngine.playSfx('antigravOn', 0.7)
+        runtime.hangActive = true
+      } else {
+        if (!runtime.slowActive) audioEngine.playSfx('slowmoOn', 0.7)
+        runtime.slowActive = true
+      }
+      return
+    }
+    if (!pressed) return
+    if (action === 'restart') { if (ui.gameOver.value) resetGame(); return }
+    if (action === 'pause') { togglePause(); return }
+    if (ui.paused.value || ui.gameOver.value) return
+    if (action === 'jump') handleJump()
+    else if (action === 'slam') handleSlam()
+    else if (action === 'blast') handleBlast()
+    else if (action === 'phase') handlePhase()
+    else if (action === 'laneUp') handleLaneChange('up')
+    else if (action === 'laneDown') handleLaneChange('down')
   }
 
-  const handleTouch = (e: TouchEvent) => {
+  let canvasGesture: { id: number; x: number; y: number } | null = null
+  function handleCanvasPointerDown(e: PointerEvent) {
+    if (e.pointerType === 'mouse') { action('jump'); return }
     e.preventDefault()
-    if (!ui.paused.value) handleJump()
+    canvasGesture = { id: e.pointerId, x: e.clientX, y: e.clientY }
+    canvas.setPointerCapture(e.pointerId)
+  }
+
+  function handleCanvasPointerUp(e: PointerEvent) {
+    if (!canvasGesture || canvasGesture.id !== e.pointerId) return
+    e.preventDefault()
+    const dx = e.clientX - canvasGesture.x
+    const dy = e.clientY - canvasGesture.y
+    canvasGesture = null
+    if (Math.abs(dy) >= 28 && Math.abs(dy) > Math.abs(dx) * 1.2) {
+      action(dy < 0 ? 'laneUp' : 'laneDown')
+    } else if (Math.hypot(dx, dy) < 20) {
+      action('jump')
+    }
+  }
+
+  function handleCanvasPointerCancel() {
+    canvasGesture = null
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (ui.gameOver.value && matchesKey('restart', e.code, keybinds)) {
-      e.preventDefault()
-      resetGame()
-      return
-    }
-    if (matchesKey('pause', e.code, keybinds)) {
-      e.preventDefault()
-      togglePause()
-      return
-    }
-    if (ui.paused.value) return
-    if (matchesKey('jump', e.code, keybinds)) {
-      e.preventDefault()
-      handleJump()
-    }
-    if (matchesKey('slam', e.code, keybinds)) {
-      e.preventDefault()
-      handleSlam()
-    }
-    if (matchesKey('blast', e.code, keybinds)) {
-      e.preventDefault()
-      handleBlast()
-    }
-    if (matchesKey('laneUp', e.code, keybinds)) {
-      e.preventDefault()
-      handleLaneChange('up')
-    }
-    if (matchesKey('laneDown', e.code, keybinds)) {
-      e.preventDefault()
-      handleLaneChange('down')
-    }
-    if (matchesKey('phase', e.code, keybinds)) {
-      e.preventDefault()
-      handlePhase()
-    }
-    if (matchesKey('antigrav', e.code, keybinds)) {
-      e.preventDefault()
-      if (!runtime.hangActive) audioEngine.playSfx('antigravOn', 0.7)
-      runtime.hangActive = true
-    }
-    if (matchesKey('slowmo', e.code, keybinds)) {
-      e.preventDefault()
-      if (!runtime.slowActive) audioEngine.playSfx('slowmoOn', 0.7)
-      runtime.slowActive = true
+    if (e.target instanceof HTMLInputElement) return
+    for (const name of ['restart', 'pause', 'jump', 'slam', 'blast', 'laneUp', 'laneDown', 'phase', 'antigrav', 'slowmo'] as GameAction[]) {
+      if (matchesKey(name, e.code, keybinds)) { e.preventDefault(); if (name !== 'pause' || !e.repeat) action(name); return }
     }
   }
 
   function handleKeyup(e: KeyboardEvent) {
-    if (ui.paused.value) return
-    if (matchesKey('antigrav', e.code, keybinds)) runtime.hangActive = false
-    if (matchesKey('slowmo', e.code, keybinds)) runtime.slowActive = false
+    if (matchesKey('antigrav', e.code, keybinds)) action('antigrav', false)
+    if (matchesKey('slowmo', e.code, keybinds)) action('slowmo', false)
   }
 
   function updatePowerTint(dtRaw: number) {
@@ -2145,12 +2149,24 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     state.editingKey.value = null
   }
 
-  function boot() {
-    const rect = canvas.parentElement?.getBoundingClientRect()
-    runtime.width = Math.min(960, (rect?.width ?? 960) - 16)
+  let resizeObserver: ResizeObserver | null = null
+  function isPortraitTouch() {
+    return window.matchMedia('(pointer: coarse)').matches && (canvas.parentElement?.clientWidth ?? 960) < 640
+  }
+  function resizeCanvas() {
+    const width = Math.max(280, Math.floor((canvas.parentElement?.clientWidth ?? 976) - 16))
+    // A wider logical view makes actors smaller and keeps hazards visible longer in portrait.
+    const nextWidth = isPortraitTouch() ? 600 : Math.min(960, width)
+    runtime.baseScrollSpeed = isPortraitTouch() ? 350 : 440
+    if (canvas.width === nextWidth && canvas.height === 400) return
+    runtime.width = nextWidth
     runtime.height = 400
-    canvas.width = runtime.width
-    canvas.height = runtime.height
+    canvas.width = nextWidth
+    canvas.height = 400
+  }
+
+  function boot() {
+    resizeCanvas()
     runtime.ctx = canvas.getContext('2d')
 
     setupReplayRecorder(canvas, runtime)
@@ -2162,8 +2178,13 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
 
     window.addEventListener('keydown', handleKeydown)
     window.addEventListener('keyup', handleKeyup)
-    canvas.addEventListener('click', handleClick)
-    canvas.addEventListener('touchstart', handleTouch, { passive: false })
+    canvas.addEventListener('pointerdown', handleCanvasPointerDown)
+    canvas.addEventListener('pointerup', handleCanvasPointerUp)
+    canvas.addEventListener('pointercancel', handleCanvasPointerCancel)
+    if (canvas.parentElement) {
+      resizeObserver = new ResizeObserver(resizeCanvas)
+      resizeObserver.observe(canvas.parentElement)
+    }
   }
 
   function destroy() {
@@ -2174,8 +2195,10 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     stopReplayRecorder(runtime)
     window.removeEventListener('keydown', handleKeydown)
     window.removeEventListener('keyup', handleKeyup)
-    canvas.removeEventListener('click', handleClick)
-    canvas.removeEventListener('touchstart', handleTouch)
+    canvas.removeEventListener('pointerdown', handleCanvasPointerDown)
+    canvas.removeEventListener('pointerup', handleCanvasPointerUp)
+    canvas.removeEventListener('pointercancel', handleCanvasPointerCancel)
+    resizeObserver?.disconnect()
   }
 
   return {
@@ -2185,6 +2208,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     handleSlam,
     handleBlast,
     handlePhase,
+    action,
     handleAudioUpload,
     loadDefaultAudio,
     setDifficulty,
@@ -2210,6 +2234,4 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       currentTime: audioEngine.audio?.currentTime ?? 0,
     }),
   }
-}}
-
-
+}

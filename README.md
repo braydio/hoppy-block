@@ -58,3 +58,6 @@ Rhythm runner where you surf the beat, jump gaps, and slam enemies for charge an
 
 - Enter your name on the Game Over screen to save runs locally; top 10 scores are kept with dates.
 - Stylish air-combo moments auto-capture a 5s instant replay, shown picture-in-picture.
+# Share a development game
+
+Run `npm run dev:share` after installing ngrok and configuring its auth token (`ngrok config add-authtoken <token>`). The command starts Vite and ngrok, prints the HTTPS link to send to friends, and stops both when you press Ctrl+C. The link changes when ngrok restarts. This serves your local development game; `npm run build` still creates a static deployable site.

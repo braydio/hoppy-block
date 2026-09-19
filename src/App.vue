@@ -101,13 +101,19 @@ import HoppyBlockGame from './components/HoppyBlockGame.vue'
 }
 
 @media (max-width: 640px) {
+  .app-header { padding: 0.45rem 0.5rem 0; }
+  .app-main { padding: 0.4rem; min-width: 0; display: block; }
+  .title-wrap { padding: 0.2rem 0.6rem 0.2rem 5rem; }
+  .title-wrap h1 { font-size: 1.2rem; letter-spacing: 0.06em; }
+  .title-vignette-slot { width: 72px; height: 36px; }
+  .byline { display: none; }
   .title-wrap {
-    padding-left: 10.5rem;
+    padding-left: 5rem;
   }
 
   .title-vignette-slot {
-    width: 150px;
-    height: 54px;
+    width: 72px;
+    height: 36px;
     left: 0.4rem;
     bottom: -0.15rem;
   }

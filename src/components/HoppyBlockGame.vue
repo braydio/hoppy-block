@@ -53,6 +53,11 @@
     <div class="game-frame" :class="{ 'game-frame--beat': ui.beatPulse.value }">
       <div v-if="ui.invincible.value" class="dev-badge">DEV INVINCIBLE</div>
       <canvas ref="canvas" class="game-canvas"></canvas>
+      <div class="mobile-controls mobile-controls--primary" aria-label="Primary touch controls">
+        <span class="mobile-controls__swipe">Swipe ↑↓<br />on game</span>
+        <button @pointerdown="controlDown($event, 'slam')">Slam</button>
+        <button class="mobile-controls__jump" @pointerdown="controlDown($event, 'jump')">Jump</button>
+      </div>
 
       <div v-if="ui.snapshotMessageTimer.value > 0" class="replay-toast">
         <div class="replay-title">{{ ui.celebrationMessage.value || 'TRICKY!' }}</div>
@@ -76,7 +81,7 @@
             <button class="save-button" @click="handleSaveScore">Save Score</button>
           </div>
           <button class="restart-button" @click="handleRestart">Restart</button>
-          <p class="help">
+          <p class="help keyboard-help">
             Press <kbd>{{ keyLabel(keybinds.restart) }}</kbd> to restart.
           </p>
         </div>
@@ -85,7 +90,7 @@
       <div v-if="ui.paused.value && !ui.gameOver.value" class="overlay overlay--paused">
         <div class="overlay-card overlay-card--paused">
           <h2>Paused</h2>
-          <p>
+          <p class="keyboard-help">
             Press <kbd>{{ keyLabel(keybinds.pause) }}</kbd> or click Resume.
           </p>
         </div>
@@ -103,7 +108,8 @@
         >
           <h2>Hoppy Block</h2>
 
-          <p>
+          <div class="touch-help">Swipe up or down on the game to change lanes. Tap or press Jump to hop. Hold Antigrav or Slow-Mo.</div>
+          <div class="keyboard-help"><p>
             <kbd>{{ keyLabel(keybinds.jump) }}</kbd> — Jump
           </p>
           <p>
@@ -127,14 +133,23 @@
           <p>
             <kbd>{{ keyLabel(keybinds.phase) }}</kbd> — Phase Shift
           </p>
+          </div>
+          <button class="start-button" @click.stop="handleStart">Start game</button>
 
-          <p class="help" style="margin-top: 0.6rem">
+          <p class="help intro-audio-help" style="margin-top: 0.6rem">
             Load a local mp3 file<br />
             with the <strong><kbd>Track</kbd></strong> selector above <br />
             to generate a custom level.
           </p>
         </div>
       </div>
+    </div>
+
+    <div class="mobile-controls mobile-controls--abilities" aria-label="Touch abilities">
+      <button @pointerdown="controlDown($event, 'blast')">Blast</button>
+      <button @pointerdown="controlDown($event, 'phase')">Phase</button>
+      <button @pointerdown="controlDown($event, 'antigrav')" @pointerup="controlUp($event, 'antigrav')" @pointercancel="controlUp($event, 'antigrav')" @lostpointercapture="controlUp($event, 'antigrav')">Antigrav</button>
+      <button @pointerdown="controlDown($event, 'slowmo')" @pointerup="controlUp($event, 'slowmo')" @pointercancel="controlUp($event, 'slowmo')" @lostpointercapture="controlUp($event, 'slowmo')">Slow-Mo</button>
     </div>
 
     <section class="levelmap-panel">
@@ -417,6 +432,18 @@ let spawnDebugView: ReturnType<typeof createSpawnDebugView> | null = null
 let spawnDebugRaf: number | null = null
 
 let game: ReturnType<typeof createGameLoop> | null = null
+type Action = 'jump' | 'slam' | 'blast' | 'phase' | 'laneUp' | 'laneDown' | 'antigrav' | 'slowmo'
+
+function controlDown(event: PointerEvent, action: Action) {
+  event.preventDefault()
+  if (event.currentTarget instanceof HTMLElement) event.currentTarget.setPointerCapture(event.pointerId)
+  game?.action(action)
+}
+
+function controlUp(event: PointerEvent, action: Action) {
+  event.preventDefault()
+  game?.action(action, false)
+}
 
 function handleSaveScore() {
   saveHighScore(ui, ui.score.value)
@@ -1564,6 +1591,32 @@ function handleSpawnDebugPointerLeave() {
 </script>
 
 <style scoped>
+.mobile-controls, .touch-help { display: none; }
+.start-button { min-height: 44px; padding: 0.5rem 1.5rem; border-radius: 0.7rem; background: #22c55e; color: #052e16; font-weight: 800; border: 0; cursor: pointer; }
+@media (pointer: coarse) {
+  .keyboard-help { display: none; }
+  .touch-help { display: block; margin: 0.5rem 0; }
+  .mobile-controls { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.4rem; user-select: none; }
+  .mobile-controls--primary { margin-top: 6px; grid-template-columns: 1fr 1fr 1.25fr; }
+  .mobile-controls--abilities { width: 100%; max-width: 960px; }
+  .mobile-controls__swipe { display: flex; align-items: center; justify-content: center; min-height: 52px; text-align: center; line-height: 1.1; color: #cbd5e1; font-size: 0.75rem; }
+  .mobile-controls button { min-width: 0; min-height: 52px; padding: 0.35rem; border: 1px solid #38bdf8; border-radius: 0.8rem; background: #123047; color: #f8fafc; font-weight: 700; font-size: clamp(0.65rem, 2.4vw, 0.95rem); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+  .mobile-controls button:active { background: #0e7490; }
+  .mobile-controls__jump { background: #166534 !important; border-color: #4ade80 !important; font-size: 1rem !important; }
+  .game-canvas { touch-action: none; }
+}
+@media (max-width: 640px) {
+  .game-shell { gap: 0.45rem; min-width: 0; }
+  .hud { gap: 0.35rem; width: 100%; margin-bottom: 0; }
+  .hud-item { padding: 0.25rem 0.5rem; }
+  .hud-item .label, .subvalue, .dev-toggle { display: none; }
+  .hud-audio { order: 5; width: 100%; }
+  .audio-label { width: 100%; justify-content: center; }
+  .audio-label input { min-width: 0; max-width: 75%; }
+  .game-frame { box-sizing: border-box; border-radius: 0.7rem; padding: 0.3rem; min-width: 0; }
+  .overlay-card { max-height: 95%; overflow-y: auto; box-sizing: border-box; padding: 0.7rem; }
+  .levelmap-panel, .access-panel, .scoreboard-panel, .keybinds-panel, .controls { box-sizing: border-box; max-width: 100%; }
+}
 .game-shell {
   display: flex;
   flex-direction: column;
@@ -2455,5 +2508,21 @@ kbd {
 .score-empty {
   opacity: 0.7;
   margin: 0.2rem 0 0;
+}
+@media (pointer: coarse) {
+  .game-frame { padding-bottom: 0.5rem; }
+  .overlay { bottom: calc(52px + 6px + 0.5rem); }
+  .overlay-card { max-height: 100%; overflow-y: auto; box-sizing: border-box; }
+}
+@media (pointer: coarse) and (max-width: 640px) {
+  .game-frame { padding-bottom: 0.3rem; }
+  .overlay { bottom: calc(52px + 6px + 0.3rem); }
+  .overlay-card { max-width: min(90%, 300px); padding: 0.55rem 0.65rem; }
+  .overlay-card h2 { font-size: 1.1rem; margin: 0.1rem 0 0.25rem; }
+  .overlay-card p { font-size: 0.8rem; }
+  .intro-audio-help { display: none; }
+  .score-save { flex-direction: column; gap: 0.3rem; margin: 0.3rem 0; }
+  .name-input { min-width: 0; min-height: 36px; }
+  .save-button, .restart-button { min-height: 40px; }
 }
 </style>
