@@ -106,7 +106,7 @@ import HoppyBlockGame from './components/HoppyBlockGame.vue'
   .title-wrap { padding: 0.2rem 0.6rem 0.2rem 5rem; }
   .title-wrap h1 { font-size: 1.2rem; letter-spacing: 0.06em; }
   .title-vignette-slot { width: 72px; height: 36px; }
-  .byline { display: none; }
+  .byline { display: block; font-size: 0.72rem; margin-top: 0.12rem; }
   .title-wrap {
     padding-left: 5rem;
   }

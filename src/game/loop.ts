@@ -70,6 +70,7 @@ import { Easing } from './render/playerAnimation'
 import { persistTokens } from './core/gameState'
 import type { GameState } from './core/gameState'
 import type { GroundSegment } from './core/types'
+import { classifyTouchGesture, touchGestureAction } from './core/touchGestures'
 
 /**
  * Return the ground segment that currently supports the player, if any.
@@ -792,6 +793,11 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     // Give players something to react to immediately.
     spawns.spawnObstacle({ nearStart: true })
     spawns.spawnEnemy('gomba')
+  }
+
+  function restartRun() {
+    resetGame()
+    handleJump()
   }
 
   async function startAudio() {
@@ -1897,6 +1903,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     runtime.obstacles = runtime.obstacles.filter((o) => !o._destroy)
 
     if (!prevGameOver && ui.gameOver.value) {
+      runtime.hangActive = false
+      runtime.slowActive = false
       audioEngine.playSfx('death', 1)
       ui.canSaveScore.value = true
       ui.savedCurrentRun.value = false
@@ -2001,7 +2009,7 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
 
   function action(action: GameAction, pressed = true) {
     if (action === 'antigrav' || action === 'slowmo') {
-      if (!pressed || ui.paused.value || ui.gameOver.value) {
+      if (!pressed || !ui.started.value || ui.paused.value || ui.gameOver.value) {
         if (action === 'antigrav') runtime.hangActive = false
         else runtime.slowActive = false
         return
@@ -2016,9 +2024,9 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
       return
     }
     if (!pressed) return
-    if (action === 'restart') { if (ui.gameOver.value) resetGame(); return }
+    if (action === 'restart') { if (ui.gameOver.value) restartRun(); return }
     if (action === 'pause') { togglePause(); return }
-    if (ui.paused.value || ui.gameOver.value) return
+    if (ui.paused.value || ui.gameOver.value || !ui.started.value) return
     if (action === 'jump') handleJump()
     else if (action === 'slam') handleSlam()
     else if (action === 'blast') handleBlast()
@@ -2041,11 +2049,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     const dx = e.clientX - canvasGesture.x
     const dy = e.clientY - canvasGesture.y
     canvasGesture = null
-    if (Math.abs(dy) >= 28 && Math.abs(dy) > Math.abs(dx) * 1.2) {
-      action(dy < 0 ? 'laneUp' : 'laneDown')
-    } else if (Math.hypot(dx, dy) < 20) {
-      action('jump')
-    }
+    const gestureAction = touchGestureAction(classifyTouchGesture(dx, dy))
+    if (gestureAction) action(gestureAction)
   }
 
   function handleCanvasPointerCancel() {
@@ -2092,9 +2097,11 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
   }
 
   function togglePause() {
-    if (ui.gameOver.value) return
+    if (ui.gameOver.value || !ui.started.value) return
     ui.paused.value = !ui.paused.value
     if (ui.paused.value) {
+      runtime.hangActive = false
+      runtime.slowActive = false
       audioEngine.pause()
     } else {
       audioEngine.resume()
@@ -2105,6 +2112,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     if (ui.gameOver.value) return
     ui.paused.value = paused
     if (ui.paused.value) {
+      runtime.hangActive = false
+      runtime.slowActive = false
       audioEngine.pause()
     } else {
       audioEngine.resume()
@@ -2188,6 +2197,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
   }
 
   function destroy() {
+    runtime.hangActive = false
+    runtime.slowActive = false
     if (runtime.animationId) cancelAnimationFrame(runtime.animationId)
     if (runtime.beatIntervalId) clearInterval(runtime.beatIntervalId)
     if (runtime.obstacleSpawnIntervalId) clearInterval(runtime.obstacleSpawnIntervalId)
@@ -2209,6 +2220,8 @@ export function createGameLoop(canvas: HTMLCanvasElement, state: GameState) {
     handleBlast,
     handlePhase,
     action,
+    startRun: () => handleJump(),
+    restartRun,
     handleAudioUpload,
     loadDefaultAudio,
     setDifficulty,

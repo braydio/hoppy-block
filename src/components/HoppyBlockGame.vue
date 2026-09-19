@@ -31,6 +31,7 @@
             {{ opt.label }}
           </button>
         </div>
+        <button class="help-button" :disabled="showHelp" @click="openHelp">Help</button>
       </div>
       <div class="hud-audio">
         <label class="audio-label">
@@ -40,7 +41,7 @@
       </div>
       <div class="hud-item">
         <span class="label">State</span>
-        <button class="pause-button" @click="togglePause">
+        <button class="pause-button" :disabled="showHelp" @click="togglePause">
           {{ ui.paused.value ? 'Resume' : 'Pause' }}
         </button>
         <label class="dev-toggle">
@@ -54,9 +55,9 @@
       <div v-if="ui.invincible.value" class="dev-badge">DEV INVINCIBLE</div>
       <canvas ref="canvas" class="game-canvas"></canvas>
       <div class="mobile-controls mobile-controls--primary" aria-label="Primary touch controls">
-        <span class="mobile-controls__swipe">Swipe ↑↓<br />on game</span>
-        <button @pointerdown="controlDown($event, 'slam')">Slam</button>
+        <span class="mobile-controls__swipe">↓ Slam<br />↑ / ← Lanes</span>
         <button class="mobile-controls__jump" @pointerdown="controlDown($event, 'jump')">Jump</button>
+        <button :class="{ 'mobile-controls__held': heldAntigrav }" :aria-pressed="heldAntigrav" @pointerdown="controlDown($event, 'antigrav')" @pointerup="controlUp($event, 'antigrav')" @pointercancel="controlUp($event, 'antigrav')" @lostpointercapture="controlUp($event, 'antigrav')">Hold Antigrav</button>
       </div>
 
       <div v-if="ui.snapshotMessageTimer.value > 0" class="replay-toast">
@@ -97,59 +98,46 @@
       </div>
 
       <div
-        v-if="(!ui.started.value || ui.introCollapsing.value) && !ui.gameOver.value"
+        v-if="showHelp && !ui.gameOver.value"
         class="overlay"
         :class="{ 'overlay--collapse': ui.introCollapsing.value }"
       >
-        <div
-          class="overlay-card"
-          :class="{ 'overlay-card--collapse': ui.introCollapsing.value }"
-          @click="handleStart"
-        >
-          <h2>Hoppy Block</h2>
-
-          <div class="touch-help">Swipe up or down on the game to change lanes. Tap or press Jump to hop. Hold Antigrav or Slow-Mo.</div>
-          <div class="keyboard-help"><p>
-            <kbd>{{ keyLabel(keybinds.jump) }}</kbd> — Jump
-          </p>
-          <p>
-            <kbd>{{ keyLabel(keybinds.slam) }}</kbd> — Slide / Slam
-          </p>
-          <p>
-            <kbd>{{ keyLabel(keybinds.antigrav) }}</kbd> — Antigrav
-          </p>
-          <p>
-            <kbd>{{ keyLabel(keybinds.slowmo) }}</kbd> — Slow-Mo
-          </p>
-          <p>
-            <kbd>{{ keyLabel(keybinds.blast) }}</kbd> — Beat Blast
-          </p>
-          <p>
-            <kbd>{{ keyLabel(keybinds.laneUp) }}</kbd> — Track Up
-          </p>
-          <p>
-            <kbd>{{ keyLabel(keybinds.laneDown) }}</kbd> — Track Down
-          </p>
-          <p>
-            <kbd>{{ keyLabel(keybinds.phase) }}</kbd> — Phase Shift
-          </p>
+        <div class="overlay-card onboarding-card" :class="{ 'overlay-card--collapse': ui.introCollapsing.value }" role="dialog" aria-label="How to play Hoppy Block">
+          <header class="onboarding-header">
+            <h2>Hoppy Block</h2>
+            <span>{{ introPage + 1 }} / 3 · {{ ['Movement', 'Powers', 'Music'][introPage] }}</span>
+          </header>
+          <div ref="introContent" class="onboarding-content" tabindex="0">
+            <template v-if="introPage === 0">
+              <p v-if="isTouchInput">Tap the game or Jump to hop. Swipe up for a higher track or left for a lower one when lanes appear. Swipe down for Slam: it slides on the ground and drops you fast in the air.</p>
+              <p v-else><kbd>{{ keyLabel(keybinds.jump) }}</kbd> Jump · <kbd>{{ keyLabel(keybinds.slam) }}</kbd> Slide / Slam · <kbd>{{ keyLabel(keybinds.laneUp) }}</kbd> Track Up · <kbd>{{ keyLabel(keybinds.laneDown) }}</kbd> Track Down</p>
+              <p>You can <strong>double jump</strong> while airborne if you have enough charge. Grounded Slam slides; airborne Slam drops you fast.</p>
+            </template>
+            <template v-else-if="introPage === 1">
+              <p v-if="isTouchInput">Hold Antigrav to float or Slow-Mo to ease the pace. Tap Beat Blast on the beat; tap Phase to shift.</p>
+              <p v-else><kbd>{{ keyLabel(keybinds.antigrav) }}</kbd> Antigrav · <kbd>{{ keyLabel(keybinds.slowmo) }}</kbd> Slow-Mo · <kbd>{{ keyLabel(keybinds.blast) }}</kbd> Beat Blast · <kbd>{{ keyLabel(keybinds.phase) }}</kbd> Phase Shift</p>
+              <p>Antigrav and Slow-Mo drain charge. Beat Blast becomes a forward dash when timed to the beat with enough charge; an off-beat use still costs a little charge. Phase costs charge and has a cooldown.</p>
+            </template>
+            <template v-else>
+              <p>Hoppy Block reacts to the music. Timing actions to the beat can earn extra charge and bonuses.</p>
+              <p>Use the bundled track, or choose a local audio file with the Track selector above to generate a custom level.</p>
+            </template>
+            <p class="onboarding-tip"><strong>TIP</strong> {{ currentTip }}</p>
           </div>
-          <button class="start-button" @click.stop="handleStart">Start game</button>
-
-          <p class="help intro-audio-help" style="margin-top: 0.6rem">
-            Load a local mp3 file<br />
-            with the <strong><kbd>Track</kbd></strong> selector above <br />
-            to generate a custom level.
-          </p>
+          <nav class="onboarding-nav" aria-label="Onboarding pages">
+            <button v-if="introPage > 0" @click="changeIntroPage(-1)">Back</button>
+            <button v-if="introPage < 2" class="start-button" @click="changeIntroPage(1)">Next</button>
+            <button v-if="ui.started.value" @click="closeHelp">Close</button>
+            <button v-else-if="introPage === 2" class="start-button" @click="handleStart">Play</button>
+          </nav>
         </div>
       </div>
     </div>
 
     <div class="mobile-controls mobile-controls--abilities" aria-label="Touch abilities">
-      <button @pointerdown="controlDown($event, 'blast')">Blast</button>
+      <button @pointerdown="controlDown($event, 'blast')">Beat Blast</button>
       <button @pointerdown="controlDown($event, 'phase')">Phase</button>
-      <button @pointerdown="controlDown($event, 'antigrav')" @pointerup="controlUp($event, 'antigrav')" @pointercancel="controlUp($event, 'antigrav')" @lostpointercapture="controlUp($event, 'antigrav')">Antigrav</button>
-      <button @pointerdown="controlDown($event, 'slowmo')" @pointerup="controlUp($event, 'slowmo')" @pointercancel="controlUp($event, 'slowmo')" @lostpointercapture="controlUp($event, 'slowmo')">Slow-Mo</button>
+      <button :class="{ 'mobile-controls__held': heldSlowmo }" :aria-pressed="heldSlowmo" @pointerdown="controlDown($event, 'slowmo')" @pointerup="controlUp($event, 'slowmo')" @pointercancel="controlUp($event, 'slowmo')" @lostpointercapture="controlUp($event, 'slowmo')">Hold Slow-Mo</button>
     </div>
 
     <section class="levelmap-panel">
@@ -385,6 +373,7 @@ import {
 } from '@/game/core/gameState'
 import { keyLabel } from '@/game/core/keybinds'
 import { createGameLoop } from '@/game/loop'
+import { pickGameplayTip } from '@/game/core/gameplayTips'
 import { createSpawnDebugView } from '@/debug/spawnDebugView'
 import { drawPlayer } from '@/game/render/drawPlayer'
 import { drawEnemies } from '@/game/render/drawEnemies'
@@ -433,15 +422,42 @@ let spawnDebugRaf: number | null = null
 
 let game: ReturnType<typeof createGameLoop> | null = null
 type Action = 'jump' | 'slam' | 'blast' | 'phase' | 'laneUp' | 'laneDown' | 'antigrav' | 'slowmo'
+const introPage = ref(0)
+const showHelp = ref(true)
+let resumeAfterHelp = false
+const introContent = ref<HTMLElement | null>(null)
+const isTouchInput = ref(false)
+const heldAntigrav = ref(false)
+const heldSlowmo = ref(false)
+const currentTip = ref(pickGameplayTip())
+let pointerMedia: MediaQueryList | null = null
+function updateInputMode() {
+  isTouchInput.value = pointerMedia?.matches ?? false
+}
+function changeIntroPage(delta: number) {
+  introPage.value = Math.max(0, Math.min(2, introPage.value + delta))
+  nextTick(() => { if (introContent.value) introContent.value.scrollTop = 0 })
+}
+function clearHeldControls() {
+  heldAntigrav.value = false
+  heldSlowmo.value = false
+  game?.action('antigrav', false)
+  game?.action('slowmo', false)
+}
 
 function controlDown(event: PointerEvent, action: Action) {
   event.preventDefault()
+  if (!ui.started.value || ui.paused.value || ui.gameOver.value) return
   if (event.currentTarget instanceof HTMLElement) event.currentTarget.setPointerCapture(event.pointerId)
+  if (action === 'antigrav') heldAntigrav.value = true
+  if (action === 'slowmo') heldSlowmo.value = true
   game?.action(action)
 }
 
 function controlUp(event: PointerEvent, action: Action) {
   event.preventDefault()
+  if (action === 'antigrav') heldAntigrav.value = false
+  if (action === 'slowmo') heldSlowmo.value = false
   game?.action(action, false)
 }
 
@@ -454,11 +470,28 @@ function handleAudioUpload(event: Event) {
 }
 
 function handleRestart() {
-  game?.resetGame()
+  clearHeldControls()
+  game?.restartRun()
 }
 
 function handleStart() {
-  game?.handleJump()
+  introPage.value = 0
+  showHelp.value = false
+  game?.startRun()
+}
+
+function openHelp() {
+  if (showHelp.value || ui.gameOver.value) return
+  resumeAfterHelp = ui.started.value && !ui.paused.value
+  if (resumeAfterHelp) game?.setPaused(true)
+  introPage.value = 0
+  showHelp.value = true
+}
+
+function closeHelp() {
+  showHelp.value = false
+  if (resumeAfterHelp) game?.setPaused(false)
+  resumeAfterHelp = false
 }
 
 function setDifficulty(level: string) {
@@ -470,10 +503,22 @@ function setKeybind(action: string, event: KeyboardEvent) {
 }
 
 function togglePause() {
+  clearHeldControls()
   game?.togglePause()
 }
 
+watch(() => ui.gameOver.value, (gameOver, wasOver) => {
+  if (gameOver) clearHeldControls()
+  if (wasOver && !gameOver) {
+    introPage.value = 0
+  }
+})
+watch(() => ui.paused.value, (paused) => { if (paused) clearHeldControls() })
+
 onMounted(() => {
+  pointerMedia = window.matchMedia('(pointer: coarse)')
+  updateInputMode()
+  pointerMedia.addEventListener('change', updateInputMode)
   if (!canvas.value) return
   game = createGameLoop(canvas.value, state)
   game.boot()
@@ -499,6 +544,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  clearHeldControls()
+  pointerMedia?.removeEventListener('change', updateInputMode)
   if (levelMapRaf) cancelAnimationFrame(levelMapRaf)
   stopSpawnDebugView()
   if (statusRaf) cancelAnimationFrame(statusRaf)
@@ -1599,9 +1646,11 @@ function handleSpawnDebugPointerLeave() {
   .mobile-controls { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.4rem; user-select: none; }
   .mobile-controls--primary { margin-top: 6px; grid-template-columns: 1fr 1fr 1.25fr; }
   .mobile-controls--abilities { width: 100%; max-width: 960px; }
+  .mobile-controls--abilities { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .mobile-controls__swipe { display: flex; align-items: center; justify-content: center; min-height: 52px; text-align: center; line-height: 1.1; color: #cbd5e1; font-size: 0.75rem; }
   .mobile-controls button { min-width: 0; min-height: 52px; padding: 0.35rem; border: 1px solid #38bdf8; border-radius: 0.8rem; background: #123047; color: #f8fafc; font-weight: 700; font-size: clamp(0.65rem, 2.4vw, 0.95rem); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
   .mobile-controls button:active { background: #0e7490; }
+  .mobile-controls button.mobile-controls__held { background: #0e7490; box-shadow: inset 0 0 0 2px #67e8f9; }
   .mobile-controls__jump { background: #166534 !important; border-color: #4ade80 !important; font-size: 1rem !important; }
   .game-canvas { touch-action: none; }
 }
@@ -2509,6 +2558,36 @@ kbd {
   opacity: 0.7;
   margin: 0.2rem 0 0;
 }
+.onboarding-card {
+  display: flex;
+  flex-direction: column;
+  width: min(92%, 420px);
+  max-width: min(92%, 420px);
+  height: min(330px, 100%);
+  min-height: 0;
+  overflow: hidden;
+  text-align: left;
+}
+.onboarding-header { flex: none; text-align: center; }
+.onboarding-header h2 { margin: 0 0 0.15rem; }
+.onboarding-header span { color: #94a3b8; font-size: 0.8rem; }
+.onboarding-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  padding: 0.4rem 0.25rem;
+  line-height: 1.45;
+}
+.onboarding-content p { margin: 0.35rem 0 0.65rem; }
+.onboarding-tip { border-left: 3px solid #38bdf8; padding: 0.25rem 0.55rem; background: rgba(56, 189, 248, 0.1); }
+.onboarding-tip strong { display: block; font-size: 0.72rem; letter-spacing: 0.08em; color: #7dd3fc; }
+.onboarding-nav { display: flex; flex: none; justify-content: flex-end; gap: 0.6rem; padding-top: 0.4rem; border-top: 1px solid rgba(148, 163, 184, 0.3); }
+.onboarding-nav button { min-height: 44px; padding: 0.4rem 1rem; border-radius: 0.65rem; cursor: pointer; }
+.onboarding-nav button:not(.start-button) { color: #e2e8f0; background: #1e293b; border: 1px solid #64748b; }
+.help-button { min-height: 34px; padding: 0.25rem 0.65rem; border-radius: 999px; border: 1px solid #38bdf8; background: #123047; color: #e0f2fe; font-weight: 700; cursor: pointer; }
+.help-button:disabled, .pause-button:disabled { opacity: 0.55; cursor: default; }
 @media (pointer: coarse) {
   .game-frame { padding-bottom: 0.5rem; }
   .overlay { bottom: calc(52px + 6px + 0.5rem); }
